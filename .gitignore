@@ -13,6 +13,9 @@ typechain-types/
 dist/
 build/
 
+# PartyKit local state
+.partykit/state/
+
 # IDE
 .vscode/
 .idea/
