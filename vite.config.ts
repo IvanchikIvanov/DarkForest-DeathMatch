@@ -17,6 +17,24 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          external: (id) => {
+            // Игнорируем отсутствующий файл артефактов Hardhat
+            if (id.includes('artifacts/contracts/DuelArena.sol/DuelArena.json')) {
+              return false; // Не делаем external, но обработаем ошибку
+            }
+            return false;
+          },
+          onwarn(warning, warn) {
+            // Игнорируем предупреждения о неразрешенных импортах для опциональных файлов
+            if (warning.code === 'UNRESOLVED_IMPORT' && warning.id?.includes('DuelArena.json')) {
+              return;
+            }
+            warn(warning);
+          }
+        }
       }
     };
 });

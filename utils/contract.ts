@@ -1,6 +1,38 @@
 import { ethers } from 'ethers';
 import { getSigner } from './web3';
-import DuelArenaABI from '../artifacts/contracts/DuelArena.sol/DuelArena.json';
+
+// Опциональный импорт ABI - может отсутствовать если контракт не скомпилирован
+let DuelArenaABI: any = null;
+let abiLoadAttempted = false;
+
+// Ленивая загрузка ABI с обработкой ошибок на этапе сборки
+const loadABI = async (): Promise<any> => {
+  if (abiLoadAttempted) {
+    return DuelArenaABI;
+  }
+  
+  abiLoadAttempted = true;
+  
+  try {
+    // Используем динамический импорт с ?url для опциональной загрузки
+    // Vite будет игнорировать этот импорт если файл не существует
+    const abiModule = await import(
+      /* @vite-ignore */
+      '../artifacts/contracts/DuelArena.sol/DuelArena.json'
+    ).catch(() => null);
+    
+    if (abiModule) {
+      DuelArenaABI = abiModule.default || abiModule;
+      return DuelArenaABI;
+    }
+  } catch (error) {
+    // ABI не найден - контракт опционален
+  }
+  
+  // ABI не найден - контракт опционален
+  console.warn('DuelArena ABI not found - Web3 features will be disabled');
+  return null;
+};
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '';
 
@@ -10,13 +42,18 @@ export const getContract = async (): Promise<ethers.Contract | null> => {
     return null;
   }
 
+  const abi = await loadABI();
+  if (!abi) {
+    return null;
+  }
+
   const signer = await getSigner();
   if (!signer) {
     // Signer not available, contract is optional
     return null;
   }
 
-  return new ethers.Contract(CONTRACT_ADDRESS, DuelArenaABI.abi, signer);
+  return new ethers.Contract(CONTRACT_ADDRESS, abi.abi, signer);
 };
 
 export const createContractRoom = async (betAmount: bigint): Promise<number | null> => {

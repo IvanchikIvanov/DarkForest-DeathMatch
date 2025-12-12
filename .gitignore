@@ -6,7 +6,7 @@ node_modules/
 
 # Hardhat files
 cache/
-artifacts/
+# artifacts/ - закоммичен для сборки на Vercel
 typechain-types/
 
 # Build output
