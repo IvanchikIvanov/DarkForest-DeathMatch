@@ -28,5 +28,6 @@ jobs:
       - name: Deploy to PartyKit
         run: npx partykit deploy
         env:
-          PARTYKIT_AUTH_TOKEN: ${{ secrets.PARTYKIT_AUTH_TOKEN }}
+          PARTYKIT_LOGIN: ivanchikivanov
+          PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_AUTH_TOKEN }}
 
