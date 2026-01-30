@@ -6,13 +6,19 @@ export interface GameAssets {
   sword: HTMLImageElement;
   shield: HTMLImageElement;
   floor: HTMLCanvasElement;
+  tiles: HTMLCanvasElement[];
 }
 
 // 0: Transparent
 const PALETTE = {
   player: { 1: '#3b82f6', 2: '#1d4ed8', 3: '#60a5fa', 4: '#1e293b' }, // Blue Knight
   sword: { 1: '#e4e4e7', 2: '#a1a1aa', 3: '#ffffff', 4: '#52525b' }, // Steel
-  shield: { 1: '#d97706', 2: '#92400e', 3: '#fbbf24', 4: '#451a03' }  // Wood/Gold
+  shield: { 1: '#d97706', 2: '#92400e', 3: '#fbbf24', 4: '#451a03' },  // Wood/Gold
+  tiles: {
+    floor: { 1: '#27272a', 2: '#18181b', 3: '#3f3f46' },
+    wall: { 1: '#52525b', 2: '#3f3f46', 3: '#71717a', 4: '#18181b' },
+    wallTop: { 1: '#71717a', 2: '#52525b', 3: '#a1a1aa' }
+  }
 };
 
 // 12x12 Pixel Grids
@@ -119,10 +125,60 @@ const createFloorPattern = (): HTMLCanvasElement => {
     return canvas;
 };
 
+const createTile = (type: 'floor' | 'wall' | 'wallTop'): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    const p = (PALETTE.tiles as any)[type];
+
+    if (type === 'floor') {
+        ctx.fillStyle = p[1];
+        ctx.fillRect(0, 0, 64, 64);
+        ctx.strokeStyle = p[2];
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, 62, 62);
+        
+        // Some noise
+        ctx.fillStyle = p[3];
+        for(let i=0; i<8; i++) {
+            ctx.fillRect(Math.random()*60, Math.random()*60, 2, 2);
+        }
+    } else if (type === 'wall') {
+        ctx.fillStyle = p[2];
+        ctx.fillRect(0, 0, 64, 64);
+        // Brick pattern
+        ctx.fillStyle = p[1];
+        ctx.fillRect(4, 4, 56, 24);
+        ctx.fillRect(4, 34, 26, 24);
+        ctx.fillRect(34, 34, 26, 24);
+        
+        ctx.fillStyle = p[3]; // Highlight
+        ctx.fillRect(4, 4, 56, 2);
+        ctx.fillRect(4, 34, 26, 2);
+        ctx.fillRect(34, 34, 26, 2);
+
+        ctx.fillStyle = p[4]; // Shadow
+        ctx.fillRect(4, 26, 56, 2);
+    } else if (type === 'wallTop') {
+        ctx.fillStyle = p[2];
+        ctx.fillRect(0, 0, 64, 64);
+        ctx.fillStyle = p[1];
+        ctx.fillRect(4, 4, 56, 56);
+        ctx.strokeStyle = p[3];
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, 48, 48);
+    }
+
+    return canvas;
+};
+
 export const generateAssets = async (): Promise<GameAssets> => {
     const [player, sword, shield] = await Promise.all([
         renderToImage(SPRITES.player, PALETTE.player, 4),
-        renderToImage(SPRITES.sword, PALETTE.sword, 4), // Scale 4 = 48x48
+        renderToImage(SPRITES.sword, PALETTE.sword, 4), 
         renderToImage(SPRITES.shield, PALETTE.shield, 4)
     ]);
     
@@ -130,6 +186,11 @@ export const generateAssets = async (): Promise<GameAssets> => {
         player,
         sword,
         shield,
-        floor: createFloorPattern()
+        floor: createFloorPattern(),
+        tiles: [
+            createTile('floor'),
+            createTile('wall'),
+            createTile('wallTop')
+        ]
     };
 };

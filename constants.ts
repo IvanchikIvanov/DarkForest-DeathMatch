@@ -1,6 +1,7 @@
 
 export const CANVAS_WIDTH = 2400;
 export const CANVAS_HEIGHT = 1800;
+export const TILE_SIZE = 64;
 
 export const FPS = 60;
 export const DT = 1 / FPS;

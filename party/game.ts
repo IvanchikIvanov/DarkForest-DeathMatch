@@ -55,6 +55,7 @@ interface GameState {
   players: Record<string, Player>;
   particles: Particle[];
   walls: Wall[];
+  tileMap?: number[][];
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
@@ -69,29 +70,30 @@ interface PlayerInput {
 
 // ============ CONSTANTS ============
 
-const CANVAS_WIDTH = 1200;
-const CANVAS_HEIGHT = 900;
+const CANVAS_WIDTH = 2400;
+const CANVAS_HEIGHT = 1800;
+const TILE_SIZE = 64;
 const DT = 1 / 60;
 const PLAYER_HP = 100;
-const PLAYER_SPEED = 200;
-const PLAYER_DODGE_SPEED = 600;
-const PLAYER_DODGE_DURATION = 0.15;
-const PLAYER_DODGE_COOLDOWN = 0.8;
-const PLAYER_BLOCK_SPEED_MOD = 0.3;
-const SWORD_RANGE = 60;
-const SWORD_COOLDOWN = 0.4;
+const PLAYER_SPEED = 150;
+const PLAYER_DODGE_SPEED = 500;
+const PLAYER_DODGE_DURATION = 0.3;
+const PLAYER_DODGE_COOLDOWN = 1.0;
+const PLAYER_BLOCK_SPEED_MOD = 0.4;
+const SWORD_RANGE = 140;
+const SWORD_COOLDOWN = 0.6;
 const SWORD_ATTACK_DURATION = 0.2;
-const SHIELD_BLOCK_ANGLE = Math.PI / 2;
-const SWORD_ARC = Math.PI / 2;
-const SWORD_DAMAGE = 35;
+const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
+const SWORD_ARC = Math.PI * 2;
+const SWORD_DAMAGE = 25;
 
 const COLORS = {
-  player: '#4ade80',
-  enemy: '#f87171',
+  player: '#3b82f6',
+  enemy: '#ef4444',
   wall: '#52525b',
   blood: '#dc2626',
   shield: '#fbbf24',
-  playerDodge: '#60a5fa'
+  playerDodge: '#93c5fd'
 };
 
 // Message types
@@ -128,70 +130,38 @@ const angleDiff = (a: number, b: number) => {
   return diff > Math.PI ? (Math.PI * 2) - diff : diff;
 };
 
-// Wall generation
-const generateMaze = (): Wall[] => {
+// Arena generation
+const generateArena = (): { walls: Wall[], tileMap: number[][] } => {
   const walls: Wall[] = [];
-  const wallThickness = 40;
-  const cellSize = 200;
-  const cols = Math.floor(CANVAS_WIDTH / cellSize);
-  const rows = Math.floor(CANVAS_HEIGHT / cellSize);
+  const cols = Math.ceil(CANVAS_WIDTH / TILE_SIZE);
+  const rows = Math.ceil(CANVAS_HEIGHT / TILE_SIZE);
+  const tileMap: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
+  
+  const centerX = cols / 2;
+  const centerY = rows / 2;
+  const arenaRadius = Math.min(cols, rows) / 2 - 2;
 
-  // Outer walls
-  walls.push({
-    id: 'wall-top', type: EntityType.WALL,
-    pos: { x: CANVAS_WIDTH / 2, y: wallThickness / 2 },
-    vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-    width: CANVAS_WIDTH, height: wallThickness
-  });
-  walls.push({
-    id: 'wall-bottom', type: EntityType.WALL,
-    pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT - wallThickness / 2 },
-    vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-    width: CANVAS_WIDTH, height: wallThickness
-  });
-  walls.push({
-    id: 'wall-left', type: EntityType.WALL,
-    pos: { x: wallThickness / 2, y: CANVAS_HEIGHT / 2 },
-    vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-    width: wallThickness, height: CANVAS_HEIGHT
-  });
-  walls.push({
-    id: 'wall-right', type: EntityType.WALL,
-    pos: { x: CANVAS_WIDTH - wallThickness / 2, y: CANVAS_HEIGHT / 2 },
-    vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-    width: wallThickness, height: CANVAS_HEIGHT
-  });
-
-  // Use seeded random for consistent maze across all clients
-  let seed = 12345;
-  const seededRandom = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
-
-  for (let row = 1; row < rows - 1; row++) {
-    for (let col = 1; col < cols - 1; col++) {
-      if (seededRandom() > 0.3) continue;
-
-      if (seededRandom() > 0.5) {
-        walls.push({
-          id: `wall-h-${row}-${col}`, type: EntityType.WALL,
-          pos: { x: col * cellSize, y: row * cellSize },
-          vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-          width: cellSize * 0.8, height: wallThickness
-        });
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const d = Math.hypot(x - centerX, y - centerY);
+      
+      if (d > arenaRadius) {
+        tileMap[y][x] = 2; // Wall top
+        if (y < rows - 1 && Math.hypot(x - centerX, (y + 1) - centerY) <= arenaRadius) {
+            tileMap[y][x] = 1; // Wall side
+        }
       } else {
-        walls.push({
-          id: `wall-v-${row}-${col}`, type: EntityType.WALL,
-          pos: { x: col * cellSize, y: row * cellSize },
-          vel: { x: 0, y: 0 }, radius: 0, color: COLORS.wall, active: true,
-          width: wallThickness, height: cellSize * 0.8
-        });
+          tileMap[y][x] = 0; // Floor
+          // Seeded random for consistent pillars if needed, but here we can just use regular random if it's only called on server
+          if (Math.random() > 0.98 && d < arenaRadius - 5) {
+              tileMap[y][x] = 2;
+              if (y < rows - 1) tileMap[y+1][x] = 1;
+          }
       }
     }
   }
 
-  return walls;
+  return { walls, tileMap };
 };
 
 const createPlayer = (id: string, index: number): Player => ({
@@ -199,11 +169,11 @@ const createPlayer = (id: string, index: number): Player => ({
   playerId: id,
   type: EntityType.PLAYER,
   pos: {
-    x: CANVAS_WIDTH / 2 + (index === 0 ? -150 : 150),
+    x: CANVAS_WIDTH / 2 + (index === 0 ? -200 : 200),
     y: CANVAS_HEIGHT / 2
   },
   vel: { x: 0, y: 0 },
-  radius: 16,
+  radius: 20,
   color: index === 0 ? COLORS.player : COLORS.enemy,
   active: true,
   hp: PLAYER_HP,
@@ -235,26 +205,26 @@ const createParticle = (pos: Vector2, color: string, speedMod: number): Particle
   };
 };
 
-const checkWallCollision = (player: Player, walls: Wall[]): boolean => {
-  for (const wall of walls) {
-    if (!wall.active) continue;
-
-    const wallLeft = wall.pos.x - wall.width / 2;
-    const wallRight = wall.pos.x + wall.width / 2;
-    const wallTop = wall.pos.y - wall.height / 2;
-    const wallBottom = wall.pos.y + wall.height / 2;
-
-    const playerLeft = player.pos.x - player.radius;
-    const playerRight = player.pos.x + player.radius;
-    const playerTop = player.pos.y - player.radius;
-    const playerBottom = player.pos.y + player.radius;
-
-    if (playerRight > wallLeft && playerLeft < wallRight &&
-      playerBottom > wallTop && playerTop < wallBottom) {
-      return true;
-    }
-  }
-  return false;
+const checkWallCollision = (player: Player, tileMap: number[][]): boolean => {
+    if (!tileMap) return false;
+    const checkPoint = (px: number, py: number) => {
+        const tx = Math.floor(px / TILE_SIZE);
+        const ty = Math.floor(py / TILE_SIZE);
+        if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return true;
+        return tileMap[ty][tx] !== 0;
+    };
+    const r = player.radius;
+    const points = [
+        { x: player.pos.x + r, y: player.pos.y },
+        { x: player.pos.x - r, y: player.pos.y },
+        { x: player.pos.x, y: player.pos.y + r },
+        { x: player.pos.x, y: player.pos.y - r },
+        { x: player.pos.x + r * 0.7, y: player.pos.y + r * 0.7 },
+        { x: player.pos.x - r * 0.7, y: player.pos.y + r * 0.7 },
+        { x: player.pos.x + r * 0.7, y: player.pos.y - r * 0.7 },
+        { x: player.pos.x - r * 0.7, y: player.pos.y - r * 0.7 },
+    ];
+    return points.some(p => checkPoint(p.x, p.y));
 };
 
 export default class GameRoom implements Party.Server {
@@ -264,49 +234,40 @@ export default class GameRoom implements Party.Server {
   gameLoop: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly room: Party.Room) {
+    const { walls, tileMap } = generateArena();
     this.state = {
       status: 'LOBBY',
       shake: 0,
       players: {},
       particles: [],
-      walls: generateMaze()
+      walls: walls,
+      tileMap: tileMap
     };
   }
 
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const playerId = conn.id;
-    console.log(`[SERVER] Player connected: ${playerId}`);
-
-    // First player is host
     if (!this.hostId) {
       this.hostId = playerId;
     }
-
-    // Add player to game
     const playerIndex = Object.keys(this.state.players).length;
     this.state.players[playerId] = createPlayer(playerId, playerIndex);
-
-    // Send current state to new player
     conn.send(JSON.stringify({
       type: 'STATE',
       payload: this.state,
       yourId: playerId,
       isHost: playerId === this.hostId
     }));
-
-    // Broadcast updated state to all
     this.broadcast();
   }
 
   onMessage(message: string, sender: Party.Connection) {
     try {
       const data: GameMessage = JSON.parse(message);
-
       switch (data.type) {
         case 'INPUT':
           this.inputs[data.playerId] = data.payload;
           break;
-
         case 'START':
           if (sender.id === this.hostId && Object.keys(this.state.players).length >= 2) {
             this.state.status = 'PLAYING';
@@ -314,16 +275,17 @@ export default class GameRoom implements Party.Server {
             this.broadcast();
           }
           break;
-
         case 'RESET':
           if (sender.id === this.hostId) {
             const playerIds = Object.keys(this.state.players);
+            const { walls, tileMap } = generateArena();
             this.state = {
               status: 'PLAYING',
               shake: 0,
               players: {},
               particles: [],
-              walls: generateMaze()
+              walls: walls,
+              tileMap: tileMap
             };
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
@@ -339,33 +301,25 @@ export default class GameRoom implements Party.Server {
 
   onClose(conn: Party.Connection) {
     const playerId = conn.id;
-    console.log(`[SERVER] Player disconnected: ${playerId}`);
-
     delete this.state.players[playerId];
     delete this.inputs[playerId];
-
-    // If host left, assign new host
     if (playerId === this.hostId) {
       const remaining = Object.keys(this.state.players);
       this.hostId = remaining[0] || null;
     }
-
-    // If no players left, stop game loop
     if (Object.keys(this.state.players).length === 0) {
       this.stopGameLoop();
       this.state.status = 'LOBBY';
     }
-
     this.broadcast();
   }
 
   startGameLoop() {
     if (this.gameLoop) return;
-
     this.gameLoop = setInterval(() => {
       this.updateGame();
       this.broadcast();
-    }, 1000 / 60); // 60 FPS
+    }, 1000 / 60);
   }
 
   stopGameLoop() {
@@ -393,26 +347,21 @@ export default class GameRoom implements Party.Server {
       const input = this.inputs[pid] || { keys: [], mouse: player.pos, mouseDown: false, mouseRightDown: false };
       const keySet = new Set(input.keys);
 
-      // Cooldowns
       player.attackCooldown = Math.max(0, player.attackCooldown - DT);
       player.cooldown = Math.max(0, player.cooldown - DT);
       player.attackTimer = Math.max(0, player.attackTimer - DT);
 
-      // Aiming
       const dx = input.mouse.x - player.pos.x;
       const dy = input.mouse.y - player.pos.y;
       player.angle = Math.atan2(dy, dx);
 
-      // Shield
       player.isBlocking = input.mouseRightDown && !player.isAttacking && !player.isDodging;
 
-      // Attack
       if (input.mouseDown && player.attackCooldown <= 0 && !player.isDodging && !player.isBlocking) {
         player.isAttacking = true;
         player.attackTimer = SWORD_ATTACK_DURATION;
         player.attackCooldown = SWORD_COOLDOWN;
 
-        // Check hits
         playerIds.forEach(targetId => {
           if (targetId === pid) return;
           const target = this.state.players[targetId];
@@ -437,8 +386,8 @@ export default class GameRoom implements Party.Server {
                 newShake += 5;
                 for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4));
                 const pushDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                target.pos.x += pushDir.x * 20;
-                target.pos.y += pushDir.y * 20;
+                target.pos.x += pushDir.x * 40;
+                target.pos.y += pushDir.y * 40;
               } else if (!target.isDodging && target.hp > 0) {
                 target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
                 newShake += 10;
@@ -457,7 +406,6 @@ export default class GameRoom implements Party.Server {
 
       if (player.attackTimer <= 0) player.isAttacking = false;
 
-      // Dodge
       if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0 && !player.isBlocking) {
         player.isDodging = true;
         player.dodgeTimer = PLAYER_DODGE_DURATION;
@@ -479,7 +427,6 @@ export default class GameRoom implements Party.Server {
         for (let i = 0; i < 3; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 2));
       }
 
-      // Movement
       if (player.isDodging) {
         player.dodgeTimer -= DT;
         if (player.dodgeTimer <= 0) {
@@ -501,14 +448,13 @@ export default class GameRoom implements Party.Server {
         player.vel = { x: moveDir.x * speed, y: moveDir.y * speed };
       }
 
-      // Apply position with collision
       const oldX = player.pos.x;
       const oldY = player.pos.y;
 
       player.pos.x += player.vel.x * DT;
       player.pos.y += player.vel.y * DT;
 
-      if (checkWallCollision(player, this.state.walls)) {
+      if (this.state.tileMap && checkWallCollision(player, this.state.tileMap)) {
         player.pos.x = oldX;
         player.pos.y = oldY;
       }
@@ -517,7 +463,6 @@ export default class GameRoom implements Party.Server {
       player.pos.y = clamp(player.pos.y, player.radius, CANVAS_HEIGHT - player.radius);
     });
 
-    // Particles
     newParticles.forEach(p => {
       p.pos.x += p.vel.x * DT;
       p.pos.y += p.vel.y * DT;
@@ -525,7 +470,6 @@ export default class GameRoom implements Party.Server {
     });
     newParticles = newParticles.filter(p => p.life > 0);
 
-    // Win condition
     if (activeCount === 1 && playerIds.length > 1) {
       this.state.status = 'VICTORY';
       this.state.winnerId = lastSurvivor;
@@ -542,7 +486,6 @@ export default class GameRoom implements Party.Server {
       payload: this.state,
       hostId: this.hostId
     });
-
     for (const conn of this.room.getConnections()) {
       conn.send(message);
     }

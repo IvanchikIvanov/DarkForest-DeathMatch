@@ -58,10 +58,20 @@ export interface GameState {
   players: Record<string, Player>;
   particles: Particle[];
   walls: Wall[];
+  tileMap?: number[][]; // Grid of tile indices
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
 }
+
+export interface GameAssets {
+  player: HTMLImageElement;
+  sword: HTMLImageElement;
+  shield: HTMLImageElement;
+  floor: HTMLCanvasElement;
+  tiles: HTMLCanvasElement[]; // Array of tile images
+}
+
 
 export interface PlayerInput {
   keys: string[]; // Serializable array of pressed keys

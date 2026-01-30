@@ -285,24 +285,25 @@ const GameCanvas: React.FC = () => {
     ctx.translate(offsetX + shakeX, offsetY + shakeY);
     ctx.scale(scale, scale);
 
-    // Floor
-    const pattern = ctx.createPattern(assets.floor, 'repeat');
-    if (pattern) {
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    // TileMap
+    if (state.tileMap) {
+      for (let y = 0; y < state.tileMap.length; y++) {
+        for (let x = 0; x < state.tileMap[y].length; x++) {
+          const tileIdx = state.tileMap[y][x];
+          const tile = assets.tiles[tileIdx];
+          if (tile) {
+            ctx.drawImage(tile, x * 64, y * 64, 64, 64);
+          }
+        }
+      }
+    } else {
+      // Fallback: Floor
+      const pattern = ctx.createPattern(assets.floor, 'repeat');
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
     }
-
-    // Draw Walls
-    ctx.fillStyle = COLORS.wall;
-    state.walls.forEach(wall => {
-      if (!wall.active) return;
-      ctx.fillRect(
-        wall.pos.x - wall.width / 2,
-        wall.pos.y - wall.height / 2,
-        wall.width,
-        wall.height
-      );
-    });
 
     // Draw Players
     Object.values(state.players).forEach(p => {
@@ -385,6 +386,16 @@ const GameCanvas: React.FC = () => {
     });
 
     ctx.restore();
+
+    // Vignette
+    const vignette = ctx.createRadialGradient(
+      canvasWidth / 2, canvasHeight / 2, 0,
+      canvasWidth / 2, canvasHeight / 2, Math.max(canvasWidth, canvasHeight) / 1.2
+    );
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     // Cursor
     if (state.status === 'PLAYING') {

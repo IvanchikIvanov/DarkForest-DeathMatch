@@ -1,96 +1,20 @@
-# DarkForest - Multiplayer Duel Arena
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-Мультиплеер игра-дуэль на WebSocket с Web3 интеграцией.
+# Run and deploy your AI Studio app
 
-## 🎮 Возможности
+This contains everything you need to run your app locally.
 
-- **Реалтайм мультиплеер** через PartyKit (WebSocket)
-- **Web3 интеграция** - ставки через смарт-контракт на Sepolia
-- **2 игрока** в одной комнате
-- **Боевая система** - атаки, блоки, уклонения
+View your app in AI Studio: https://ai.studio/apps/drive/1wnfus9t9ZUgDQfh5ypwe7mJaPbwupYUS
 
-## 🚀 Быстрый старт
+## Run Locally
 
-### Локальная разработка
+**Prerequisites:**  Node.js
 
-1. **Установка зависимостей:**
-```bash
-npm install
-```
 
-2. **Запуск (всё сразу):**
-```bash
-npm run dev:all
-```
-
-Или отдельно:
-```bash
-# Терминал 1 - PartyKit сервер
-npm run party:dev
-
-# Терминал 2 - Фронтенд
-npm run dev
-```
-
-3. **Открой:** `http://localhost:3000`
-
-### Тестирование мультиплеера локально
-
-1. Открой `http://localhost:3000` в двух браузерах/вкладках
-2. В первом: нажми "CREATE ROOM" или "QUICK MATCH"
-3. Скопируй Room ID
-4. Во втором: вставь Room ID и нажми "JOIN ROOM"
-5. Хост нажимает "START GAME"
-
-## 🌐 Деплой для глобального мультиплеера
-
-**ВАЖНО:** Для игры между разными странами нужно задеплоить PartyKit сервер и настроить переменную окружения.
-
-1. **Деплой PartyKit сервера:**
-```bash
-npx partykit login
-npm run party:deploy
-```
-После деплоя получишь URL вида: `duel-arena.username.partykit.dev`
-
-2. **Настройка Vercel:**
-   - Settings → Environment Variables
-   - Добавь: `VITE_PARTYKIT_HOST` = `your-url.partykit.dev` (БЕЗ протокола!)
-   - Пересобери проект
-
-## 📁 Структура проекта
-
-```
-├── party/
-│   └── game.ts          # PartyKit сервер (игровая логика)
-├── components/
-│   ├── GameCanvas.tsx    # Основной игровой компонент
-│   ├── WalletConnect.tsx # Web3 подключение
-│   └── BetSelector.tsx  # Выбор ставки
-├── utils/
-│   ├── partyClient.ts    # WebSocket клиент
-│   ├── contract.ts       # Web3 контракт
-│   └── gameLogic.ts      # Клиентская логика
-└── contracts/
-    └── DuelArena.sol     # Смарт-контракт
-```
-
-## 🛠️ Скрипты
-
-- `npm run dev` - запуск фронтенда
-- `npm run dev:all` - запуск фронтенда + PartyKit сервера
-- `npm run party:dev` - только PartyKit сервер
-- `npm run party:deploy` - деплой PartyKit сервера
-- `npm run build` - сборка фронтенда
-- `npm run compile` - компиляция смарт-контракта
-
-## 📚 Дополнительная документация
-
-- [WEB3_SETUP.md](./WEB3_SETUP.md) - настройка Web3 интеграции
-
-## 🔧 Технологии
-
-- **Frontend:** React + TypeScript + Vite
-- **Multiplayer:** PartyKit (WebSocket)
-- **Web3:** Hardhat + Ethers.js
-- **Blockchain:** Ethereum Sepolia Testnet
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

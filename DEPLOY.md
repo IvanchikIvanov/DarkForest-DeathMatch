@@ -34,15 +34,21 @@ npx partykit token
 
 ### Шаг 4: Получение URL PartyKit сервера
 
+**Вариант А: Автоматический деплой через GitHub Actions**
 После успешного деплоя:
 1. Зайди в **Actions** → последний запуск workflow
 2. В логах найди строку вида: `✓ Deployed to https://duel-arena.username.partykit.dev`
 3. Скопируй URL (только домен, без `https://`)
 
-Или проверь в консоли PartyKit:
+**Вариант Б: Ручной деплой (рекомендуется)**
 ```bash
-npx partykit list
+npx partykit login
+npx partykit deploy
 ```
+
+После деплоя получишь URL вида: `duel-arena.karolinaviktorovna.partykit.dev`
+
+**Текущий URL:** `duel-arena.karolinaviktorovna.partykit.dev`
 
 ### Шаг 5: Настройка Vercel
 
