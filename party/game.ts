@@ -215,75 +215,71 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
         const rand = seededRandom(seed);
         const rand2 = seededRandom(seed + 1000); // Second random for obstacles
 
-        // Default to floor or grass (50% each)
-        if (rand < 0.5) {
-          tileMap[y][x] = TILE_GRASS;
-        } else {
-          tileMap[y][x] = TILE_FLOOR;
-        }
+        // Only grass for now - clean arena
+        tileMap[y][x] = TILE_GRASS;
 
-        // Add water pools (small clusters) - 8% chance
-        if (rand > 0.92 && d < arenaRadius - 3) {
-          // Create small water cluster
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const ny = y + dy;
-              const nx = x + dx;
-              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                const nd = Math.hypot(nx - centerX, ny - centerY);
-                if (nd < arenaRadius - 2) {
-                  tileMap[ny][nx] = TILE_WATER;
-                }
-              }
-            }
-          }
-        }
+        // DISABLED: Water pools - kept for future use
+        // if (rand > 0.92 && d < arenaRadius - 3) {
+        //   // Create small water cluster
+        //   for (let dy = -1; dy <= 1; dy++) {
+        //     for (let dx = -1; dx <= 1; dx++) {
+        //       const ny = y + dy;
+        //       const nx = x + dx;
+        //       if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+        //         const nd = Math.hypot(nx - centerX, ny - centerY);
+        //         if (nd < arenaRadius - 2) {
+        //           tileMap[ny][nx] = TILE_WATER;
+        //         }
+        //       }
+        //     }
+        //   }
+        // }
 
-        // Add bush tile patches - 4% chance (reduced from 10%)
-        if (rand > 0.90 && rand <= 0.94 && d < arenaRadius - 2) {
-          tileMap[y][x] = TILE_BUSH;
-        }
+        // DISABLED: Bush tile patches - kept for future use
+        // if (rand > 0.90 && rand <= 0.94 && d < arenaRadius - 2) {
+        //   tileMap[y][x] = TILE_BUSH;
+        // }
 
-        // Add stone tile obstacles (non-walkable) - 1% chance (reduced from 3%)
-        if (rand > 0.99 && d < arenaRadius - 4 && d > 3) {
-          tileMap[y][x] = TILE_STONE;
-        }
+        // DISABLED: Stone tile obstacles - kept for future use
+        // if (rand > 0.99 && d < arenaRadius - 4 && d > 3) {
+        //   tileMap[y][x] = TILE_STONE;
+        // }
 
-        // Add tree obstacles - 1% chance (reduced from 3%)
-        if (rand2 > 0.99 && d < arenaRadius - 4 && d > 3) {
-          obstacles.push({
-            id: `tree-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'tree',
-            hp: 50, // Can be destroyed by bombs
-            radius: 24,
-            destroyed: false
-          });
-        }
+        // DISABLED: Tree obstacles - kept for future use
+        // if (rand2 > 0.99 && d < arenaRadius - 4 && d > 3) {
+        //   obstacles.push({
+        //     id: `tree-${x}-${y}`,
+        //     pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+        //     obstacleType: 'tree',
+        //     hp: 50, // Can be destroyed by bombs
+        //     radius: 24,
+        //     destroyed: false
+        //   });
+        // }
 
-        // Add rock obstacles - 0.5% chance (reduced from 2%)
-        if (rand2 > 0.995 && rand2 <= 0.997 && d < arenaRadius - 4 && d > 3) {
-          obstacles.push({
-            id: `rock-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'rock',
-            hp: -1, // Indestructible
-            radius: 28,
-            destroyed: false
-          });
-        }
+        // DISABLED: Rock obstacles - kept for future use
+        // if (rand2 > 0.995 && rand2 <= 0.997 && d < arenaRadius - 4 && d > 3) {
+        //   obstacles.push({
+        //     id: `rock-${x}-${y}`,
+        //     pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+        //     obstacleType: 'rock',
+        //     hp: -1, // Indestructible
+        //     radius: 28,
+        //     destroyed: false
+        //   });
+        // }
 
-        // Add bush obstacles - 0.5% chance (reduced from 2%)
-        if (rand2 > 0.993 && rand2 <= 0.995 && d < arenaRadius - 3 && d > 2) {
-          obstacles.push({
-            id: `bush-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'bush',
-            hp: 20, // Easily destroyed
-            radius: 20,
-            destroyed: false
-          });
-        }
+        // DISABLED: Bush obstacles - kept for future use
+        // if (rand2 > 0.993 && rand2 <= 0.995 && d < arenaRadius - 3 && d > 2) {
+        //   obstacles.push({
+        //     id: `bush-${x}-${y}`,
+        //     pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+        //     obstacleType: 'bush',
+        //     hp: 20, // Easily destroyed
+        //     radius: 20,
+        //     destroyed: false
+        //   });
+        // }
       }
     }
   }

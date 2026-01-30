@@ -365,8 +365,8 @@ const GameCanvas: React.FC = () => {
         const pulse = 1 + Math.sin(timeRef.current * 10) * 0.1 * (1 - bomb.fuseTimer / 2);
         ctx.scale(pulse, pulse);
 
-        // Draw bomb sprite
-        const bombSize = 40;
+        // Draw bomb sprite - bigger and pink
+        const bombSize = 60;
         ctx.drawImage(assets.bomb, -bombSize / 2, -bombSize / 2, bombSize, bombSize);
 
         // Draw fuse spark
@@ -530,7 +530,7 @@ const GameCanvas: React.FC = () => {
       // Bomb cooldown indicator
       const bombCooldown = (p as any).bombCooldown || 0;
       if (bombCooldown > 0) {
-        ctx.fillStyle = '#f97316';
+        ctx.fillStyle = '#ec4899';
         ctx.fillRect(p.pos.x - 15, p.pos.y + 36, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
       }
     });
@@ -673,7 +673,7 @@ const GameCanvas: React.FC = () => {
 
 
   return (
-    <div className="relative group cursor-none">
+    <div className={`relative group ${uiState.status === 'PLAYING' ? 'cursor-none' : 'cursor-auto'}`}>
       <canvas
         ref={canvasRef}
         width={canvasSize.width}
@@ -704,7 +704,7 @@ const GameCanvas: React.FC = () => {
         <div className="flex items-center gap-2">ATTACK <kbd className="bg-zinc-800 p-1 rounded">L-CLICK</kbd></div>
         <div className="flex items-center gap-2">BLOCK <kbd className="bg-zinc-800 p-1 rounded">R-CLICK</kbd></div>
         <div className="flex items-center gap-2">DODGE <kbd className="bg-zinc-800 p-1 rounded">SPACE</kbd></div>
-        <div className="flex items-center gap-2 text-orange-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-orange-400">E</kbd></div>
+        <div className="flex items-center gap-2 text-pink-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-pink-400">E</kbd></div>
       </div>
 
       {/* Connect Wallet Modal */}

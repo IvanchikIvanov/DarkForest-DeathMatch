@@ -24,7 +24,7 @@ export const COLORS = {
   waterDeep: '#1d4ed8', // blue-700
   bush: '#15803d', // green-700
   stone: '#78716c', // stone-500
-  bomb: '#f97316', // orange-500
+  bomb: '#ec4899', // pink-500
   explosion: '#fbbf24', // amber-400
   explosionInner: '#ef4444', // red-500
 };

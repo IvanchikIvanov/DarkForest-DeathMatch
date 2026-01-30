@@ -53,9 +53,9 @@ const PALETTE = {
     1: '#27272a', // Body dark
     2: '#3f3f46', // Body medium
     3: '#52525b', // Body light
-    4: '#f97316', // Fuse orange
-    5: '#fbbf24', // Spark yellow
-    6: '#ef4444', // Spark red
+    4: '#ec4899', // Fuse pink
+    5: '#f472b6', // Spark pink-light
+    6: '#f9a8d4', // Spark pink-lighter
   },
   tree: {
     1: '#15803d', // Leaves dark
