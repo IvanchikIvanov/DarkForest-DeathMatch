@@ -421,25 +421,27 @@ const GameCanvas: React.FC = () => {
       const playerSprite = isMe ? assets.player : assets.playerEnemy;
       ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
 
-      // Shield
+      // Shield - bigger and more visible
       if (p.isBlocking) {
         ctx.save();
-        ctx.translate(10, 10);
+        ctx.translate(12, 12);
         ctx.rotate(Math.PI / 4);
-        ctx.drawImage(assets.shield, -14, -14, 28, 28);
+        // Larger shield when blocking
+        ctx.drawImage(assets.shield, -24, -24, 48, 48);
         ctx.restore();
 
-        // Shield arc effect
+        // Shield arc effect - more visible
         ctx.beginPath();
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 5;
         ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 10;
-        ctx.arc(0, 0, p.radius + 18, -Math.PI / 3, Math.PI / 3);
+        ctx.shadowBlur = 15;
+        ctx.arc(0, 0, p.radius + 25, -Math.PI / 3, Math.PI / 3);
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
-        ctx.drawImage(assets.shield, -10, 5, 18, 18);
+        // Larger shield when not blocking too
+        ctx.drawImage(assets.shield, -14, 5, 28, 28);
       }
 
       // Sword

@@ -102,12 +102,13 @@ const PLAYER_DODGE_SPEED = 1000; // Doubled from 500
 const PLAYER_DODGE_DURATION = 0.3;
 const PLAYER_DODGE_COOLDOWN = 1.0;
 const PLAYER_BLOCK_SPEED_MOD = 0.4;
-const SWORD_RANGE = 140;
+const SWORD_RANGE = 220; // Increased to match visual sword length
 const SWORD_COOLDOWN = 0.6;
 const SWORD_ATTACK_DURATION = 0.2;
 const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
 const SWORD_ARC = Math.PI * 2;
 const SWORD_DAMAGE = 25;
+const SWORD_KNOCKBACK = 80; // Knockback distance when hit by sword
 
 // Bomb constants
 const BOMB_DAMAGE = 25;
@@ -679,6 +680,11 @@ export default class GameRoom implements Party.Server {
                 newShake += 10;
                 for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6, 'blood'));
 
+                // Knockback - push target away from attacker
+                const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
+                target.pos.x += knockDir.x * SWORD_KNOCKBACK;
+                target.pos.y += knockDir.y * SWORD_KNOCKBACK;
+
                 if (target.hp <= 0) {
                   target.active = false;
                   newShake += 10;
@@ -692,26 +698,24 @@ export default class GameRoom implements Party.Server {
 
       if (player.attackTimer <= 0) player.isAttacking = false;
 
-      // Dodge
+      // Dodge - only in movement direction (WASD), not mouse direction
       if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0 && !player.isBlocking) {
-        player.isDodging = true;
-        player.dodgeTimer = PLAYER_DODGE_DURATION;
-        player.cooldown = PLAYER_DODGE_COOLDOWN;
-
         let dashDir = { x: 0, y: 0 };
         if (keySet.has('w')) dashDir.y -= 1;
         if (keySet.has('s')) dashDir.y += 1;
         if (keySet.has('a')) dashDir.x -= 1;
         if (keySet.has('d')) dashDir.x += 1;
 
-        if (dashDir.x === 0 && dashDir.y === 0) {
-          dashDir = { x: Math.cos(player.angle || 0), y: Math.sin(player.angle || 0) };
-        } else {
+        // Only dodge if player is moving (has movement keys pressed)
+        if (dashDir.x !== 0 || dashDir.y !== 0) {
           dashDir = normalize(dashDir);
-        }
-        player.vel = { x: dashDir.x * PLAYER_DODGE_SPEED, y: dashDir.y * PLAYER_DODGE_SPEED };
+          player.isDodging = true;
+          player.dodgeTimer = PLAYER_DODGE_DURATION;
+          player.cooldown = PLAYER_DODGE_COOLDOWN;
+          player.vel = { x: dashDir.x * PLAYER_DODGE_SPEED, y: dashDir.y * PLAYER_DODGE_SPEED };
 
-        for (let i = 0; i < 5; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 3, 'trail'));
+          for (let i = 0; i < 5; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 3, 'trail'));
+        }
       }
 
       if (player.isDodging) {

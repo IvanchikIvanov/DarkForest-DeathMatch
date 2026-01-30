@@ -39,11 +39,12 @@ export const PLAYER_DODGE_DURATION = 0.3;
 export const PLAYER_DODGE_COOLDOWN = 1.0;
 
 // Combat
-export const SWORD_RANGE = 140;
+export const SWORD_RANGE = 220; // Increased to match visual sword length
 export const SWORD_ARC = Math.PI * 2; // Very wide swing (full circle)
 export const SWORD_COOLDOWN = 0.6;
 export const SWORD_ATTACK_DURATION = 0.2; // Visual swing time
 export const SHIELD_BLOCK_ANGLE = Math.PI / 1.2; // Frontal protection arc
+export const SWORD_KNOCKBACK = 80; // Knockback distance when hit by sword
 
 // Bomb System
 export const BOMB_DAMAGE = 25;

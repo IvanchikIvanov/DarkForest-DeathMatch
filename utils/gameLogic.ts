@@ -4,7 +4,7 @@ import {
   CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, DT, COLORS, PLAYER_HP,
   PLAYER_SPEED, PLAYER_DODGE_SPEED, PLAYER_DODGE_DURATION, PLAYER_DODGE_COOLDOWN,
   PLAYER_BLOCK_SPEED_MOD, SWORD_RANGE, SWORD_COOLDOWN,
-  SWORD_ATTACK_DURATION, SHIELD_BLOCK_ANGLE, SWORD_ARC, SWORD_DAMAGE,
+  SWORD_ATTACK_DURATION, SHIELD_BLOCK_ANGLE, SWORD_ARC, SWORD_DAMAGE, SWORD_KNOCKBACK,
   BOMB_DAMAGE, BOMB_RADIUS, BOMB_FUSE_TIME, BOMB_COOLDOWN, BOMB_THROW_DISTANCE,
   WATER_SPEED_MOD, BUSH_SPEED_MOD,
   TILE_FLOOR, TILE_WALL, TILE_WALL_TOP, TILE_GRASS, TILE_WATER, TILE_BUSH, TILE_STONE
@@ -405,6 +405,11 @@ export const updateGame = (
               newShake += 10;
               for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6));
 
+              // Knockback - push target away from attacker
+              const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
+              target.pos.x += knockDir.x * SWORD_KNOCKBACK;
+              target.pos.y += knockDir.y * SWORD_KNOCKBACK;
+
               if (target.hp <= 0) {
                 target.active = false;
                 newShake += 10;
@@ -418,26 +423,24 @@ export const updateGame = (
 
     if (player.attackTimer <= 0) player.isAttacking = false;
 
-    // Dodge
+    // Dodge - only in movement direction (WASD), not mouse direction
     if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0 && !player.isBlocking) {
-      player.isDodging = true;
-      player.dodgeTimer = PLAYER_DODGE_DURATION;
-      player.cooldown = PLAYER_DODGE_COOLDOWN;
-
       let dashDir = { x: 0, y: 0 };
       if (keySet.has('w')) dashDir.y -= 1;
       if (keySet.has('s')) dashDir.y += 1;
       if (keySet.has('a')) dashDir.x -= 1;
       if (keySet.has('d')) dashDir.x += 1;
 
-      if (dashDir.x === 0 && dashDir.y === 0) {
-        dashDir = { x: Math.cos(player.angle || 0), y: Math.sin(player.angle || 0) };
-      } else {
+      // Only dodge if player is moving (has movement keys pressed)
+      if (dashDir.x !== 0 || dashDir.y !== 0) {
         dashDir = normalize(dashDir);
-      }
-      player.vel = { x: dashDir.x * PLAYER_DODGE_SPEED, y: dashDir.y * PLAYER_DODGE_SPEED };
+        player.isDodging = true;
+        player.dodgeTimer = PLAYER_DODGE_DURATION;
+        player.cooldown = PLAYER_DODGE_COOLDOWN;
+        player.vel = { x: dashDir.x * PLAYER_DODGE_SPEED, y: dashDir.y * PLAYER_DODGE_SPEED };
 
-      for (let i = 0; i < 5; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 3));
+        for (let i = 0; i < 5; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 3));
+      }
     }
 
     if (player.isDodging) {
