@@ -212,16 +212,17 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
         // Inside arena - varied terrain
         seed++;
         const rand = seededRandom(seed);
+        const rand2 = seededRandom(seed + 1000); // Second random for obstacles
 
-        // Default to floor or grass
-        if (rand < 0.4) {
+        // Default to floor or grass (50% each)
+        if (rand < 0.5) {
           tileMap[y][x] = TILE_GRASS;
         } else {
           tileMap[y][x] = TILE_FLOOR;
         }
 
-        // Add water pools (small clusters)
-        if (rand > 0.95 && d < arenaRadius - 5) {
+        // Add water pools (small clusters) - 8% chance
+        if (rand > 0.92 && d < arenaRadius - 3) {
           // Create small water cluster
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -237,18 +238,18 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           }
         }
 
-        // Add bush patches
-        if (rand > 0.92 && rand <= 0.95 && d < arenaRadius - 4) {
+        // Add bush tile patches - 10% chance
+        if (rand > 0.82 && rand <= 0.92 && d < arenaRadius - 2) {
           tileMap[y][x] = TILE_BUSH;
         }
 
-        // Add stone obstacles (non-walkable)
-        if (rand > 0.985 && d < arenaRadius - 6 && d > 5) {
+        // Add stone tile obstacles (non-walkable) - scattered
+        if (rand > 0.97 && d < arenaRadius - 4 && d > 3) {
           tileMap[y][x] = TILE_STONE;
         }
 
-        // Add tree obstacles
-        if (rand > 0.975 && rand <= 0.985 && d < arenaRadius - 5 && d > 4) {
+        // Add tree obstacles - 3% chance
+        if (rand2 > 0.97 && d < arenaRadius - 4 && d > 3) {
           obstacles.push({
             id: `tree-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
@@ -259,8 +260,8 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           });
         }
 
-        // Add rock obstacles
-        if (rand > 0.965 && rand <= 0.975 && d < arenaRadius - 5 && d > 4) {
+        // Add rock obstacles - 2% chance
+        if (rand2 > 0.95 && rand2 <= 0.97 && d < arenaRadius - 4 && d > 3) {
           obstacles.push({
             id: `rock-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
@@ -271,8 +272,8 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           });
         }
 
-        // Add bush obstacles
-        if (rand > 0.955 && rand <= 0.965 && d < arenaRadius - 4 && d > 3) {
+        // Add bush obstacles - 2% chance
+        if (rand2 > 0.93 && rand2 <= 0.95 && d < arenaRadius - 3 && d > 2) {
           obstacles.push({
             id: `bush-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
