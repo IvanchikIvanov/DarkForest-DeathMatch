@@ -108,7 +108,9 @@ const SWORD_ATTACK_DURATION = 0.2;
 const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
 const SWORD_ARC = Math.PI * 2;
 const SWORD_DAMAGE = 25;
-const SWORD_KNOCKBACK = 80; // Knockback distance when hit by sword
+const SWORD_KNOCKBACK = 250; // Knockback distance when hit by sword
+const SWORD_KNOCKBACK_SPEED = 600; // Knockback velocity speed
+const KNOCKBACK_FRICTION = 0.85; // Friction for smooth knockback decay
 
 // Bomb constants
 const BOMB_DAMAGE = 25;
@@ -611,9 +613,13 @@ export default class GameRoom implements Party.Server {
       // Blocking
       player.isBlocking = input.mouseRightDown && !player.isAttacking && !player.isDodging;
 
-      // Bomb throwing (E key)
+      // Bomb throwing (E key) - throw in direction of cursor
       if (input.throwBomb && player.bombCooldown <= 0 && !player.isDodging) {
-        const bomb = createBomb(player.pos, pid, player.angle || 0);
+        // Calculate angle directly from mouse position to ensure accurate direction
+        const bombDx = input.mouse.x - player.pos.x;
+        const bombDy = input.mouse.y - player.pos.y;
+        const bombAngle = Math.atan2(bombDy, bombDx);
+        const bomb = createBomb(player.pos, pid, bombAngle);
         // Check if bomb lands on valid terrain
         if (this.state.tileMap) {
           const tile = getTileAt(this.state.tileMap, bomb.pos.x, bomb.pos.y);
@@ -676,10 +682,10 @@ export default class GameRoom implements Party.Server {
                 newShake += 10;
                 for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6, 'blood'));
 
-                // Knockback - push target away from attacker
+                // Knockback - apply velocity for smooth knockback
                 const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                target.pos.x += knockDir.x * SWORD_KNOCKBACK;
-                target.pos.y += knockDir.y * SWORD_KNOCKBACK;
+                target.vel.x += knockDir.x * SWORD_KNOCKBACK_SPEED;
+                target.vel.y += knockDir.y * SWORD_KNOCKBACK_SPEED;
 
                 if (target.hp <= 0) {
                   target.active = false;
@@ -738,6 +744,15 @@ export default class GameRoom implements Party.Server {
         }
 
         player.vel = { x: moveDir.x * speed, y: moveDir.y * speed };
+      }
+
+      // Apply friction to knockback (smooth deceleration)
+      if (!player.isDodging && !player.isBlocking) {
+        player.vel.x *= KNOCKBACK_FRICTION;
+        player.vel.y *= KNOCKBACK_FRICTION;
+        // Stop very small velocities
+        if (Math.abs(player.vel.x) < 10) player.vel.x = 0;
+        if (Math.abs(player.vel.y) < 10) player.vel.y = 0;
       }
 
       const oldX = player.pos.x;

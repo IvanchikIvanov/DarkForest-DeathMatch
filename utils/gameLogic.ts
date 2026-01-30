@@ -4,7 +4,7 @@ import {
   CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, DT, COLORS, PLAYER_HP,
   PLAYER_SPEED, PLAYER_DODGE_SPEED, PLAYER_DODGE_DURATION, PLAYER_DODGE_COOLDOWN,
   PLAYER_BLOCK_SPEED_MOD, SWORD_RANGE, SWORD_COOLDOWN,
-  SWORD_ATTACK_DURATION, SHIELD_BLOCK_ANGLE, SWORD_ARC, SWORD_DAMAGE, SWORD_KNOCKBACK,
+  SWORD_ATTACK_DURATION, SHIELD_BLOCK_ANGLE, SWORD_ARC, SWORD_DAMAGE, SWORD_KNOCKBACK, SWORD_KNOCKBACK_SPEED, KNOCKBACK_FRICTION,
   BOMB_DAMAGE, BOMB_RADIUS, BOMB_FUSE_TIME, BOMB_COOLDOWN, BOMB_THROW_DISTANCE,
   WATER_SPEED_MOD, BUSH_SPEED_MOD,
   TILE_FLOOR, TILE_WALL, TILE_WALL_TOP, TILE_GRASS, TILE_WATER, TILE_BUSH, TILE_STONE
@@ -332,10 +332,14 @@ export const updateGame = (
     // Blocking
     player.isBlocking = input.mouseRightDown && !player.isAttacking && !player.isDodging;
 
-    // Bomb throwing
+    // Bomb throwing - throw in direction of cursor
     if (input.throwBomb && (player.bombCooldown || 0) <= 0 && !player.isDodging) {
-      const throwX = player.pos.x + Math.cos(player.angle || 0) * BOMB_THROW_DISTANCE;
-      const throwY = player.pos.y + Math.sin(player.angle || 0) * BOMB_THROW_DISTANCE;
+      // Calculate angle directly from mouse position to ensure accurate direction
+      const bombDx = input.mouse.x - player.pos.x;
+      const bombDy = input.mouse.y - player.pos.y;
+      const bombAngle = Math.atan2(bombDy, bombDx);
+      const throwX = player.pos.x + Math.cos(bombAngle) * BOMB_THROW_DISTANCE;
+      const throwY = player.pos.y + Math.sin(bombAngle) * BOMB_THROW_DISTANCE;
 
       if (state.tileMap) {
         const tile = getTileAt(state.tileMap, throwX, throwY);
@@ -405,10 +409,10 @@ export const updateGame = (
               newShake += 10;
               for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6));
 
-              // Knockback - push target away from attacker
+              // Knockback - apply velocity for smooth knockback
               const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-              target.pos.x += knockDir.x * SWORD_KNOCKBACK;
-              target.pos.y += knockDir.y * SWORD_KNOCKBACK;
+              target.vel.x += knockDir.x * SWORD_KNOCKBACK_SPEED;
+              target.vel.y += knockDir.y * SWORD_KNOCKBACK_SPEED;
 
               if (target.hp <= 0) {
                 target.active = false;
@@ -467,6 +471,15 @@ export const updateGame = (
       }
 
       player.vel = { x: moveDir.x * speed, y: moveDir.y * speed };
+    }
+
+    // Apply friction to knockback (smooth deceleration)
+    if (!player.isDodging && !player.isBlocking) {
+      player.vel.x *= KNOCKBACK_FRICTION;
+      player.vel.y *= KNOCKBACK_FRICTION;
+      // Stop very small velocities
+      if (Math.abs(player.vel.x) < 10) player.vel.x = 0;
+      if (Math.abs(player.vel.y) < 10) player.vel.y = 0;
     }
 
     const oldX = player.pos.x;
