@@ -398,31 +398,106 @@ const GameCanvas: React.FC = () => {
       });
     }
 
-    // Draw Health Pickups
+    // Draw Health Pickups - BIG AND VISIBLE
     if ((state as any).healthPickups) {
       (state as any).healthPickups.forEach((hp: any) => {
         if (!hp.active) return;
         ctx.save();
         ctx.translate(hp.pos.x, hp.pos.y);
         
-        // Pulsing glow effect
-        const pulse = 1 + Math.sin(timeRef.current * 3) * 0.15;
+        // Strong pulsing glow effect
+        const pulse = 1 + Math.sin(timeRef.current * 4) * 0.25;
         ctx.scale(pulse, pulse);
         
-        // Green glow
+        // Outer glow circle
         ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 40;
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 50, 0, Math.PI * 2);
+        ctx.fill();
         
-        // Green cross (health symbol)
+        // Green cross (health symbol) - BIGGER
         ctx.fillStyle = '#22c55e';
-        ctx.fillRect(-20, -6, 40, 12); // Horizontal
-        ctx.fillRect(-6, -20, 12, 40); // Vertical
+        ctx.fillRect(-30, -8, 60, 16); // Horizontal
+        ctx.fillRect(-8, -30, 16, 60); // Vertical
         
         // White outline
         ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-30, -8, 60, 16);
+        ctx.strokeRect(-8, -30, 16, 60);
+        
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+    }
+
+    // Draw Gun Pickups - Golden pistol icon
+    if ((state as any).gunPickups) {
+      (state as any).gunPickups.forEach((gp: any) => {
+        if (!gp.active) return;
+        ctx.save();
+        ctx.translate(gp.pos.x, gp.pos.y);
+        
+        // Pulsing effect
+        const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+        ctx.scale(pulse, pulse);
+        
+        // Outer glow
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 35;
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 45, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Gun shape (pistol)
+        ctx.fillStyle = '#fbbf24';
+        // Barrel
+        ctx.fillRect(-25, -8, 40, 12);
+        // Handle
+        ctx.fillRect(-5, -8, 15, 30);
+        // Trigger guard
+        ctx.fillRect(5, 8, 10, 8);
+        
+        // Outline
+        ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
-        ctx.strokeRect(-20, -6, 40, 12);
-        ctx.strokeRect(-6, -20, 12, 40);
+        ctx.strokeRect(-25, -8, 40, 12);
+        ctx.strokeRect(-5, -8, 15, 30);
+        
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+    }
+
+    // Draw Bullets - Yellow streaks
+    if ((state as any).bullets) {
+      (state as any).bullets.forEach((bullet: any) => {
+        if (!bullet.active) return;
+        ctx.save();
+        ctx.translate(bullet.pos.x, bullet.pos.y);
+        
+        // Calculate angle from velocity
+        const angle = Math.atan2(bullet.vel.y, bullet.vel.x);
+        ctx.rotate(angle);
+        
+        // Glow
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 15;
+        
+        // Bullet trail
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 20, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bright core
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(5, 0, 8, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
         
         ctx.shadowBlur = 0;
         ctx.restore();
@@ -483,11 +558,36 @@ const GameCanvas: React.FC = () => {
         ctx.drawImage(assets.shield, -42, 15, 84, 84);
       }
 
-      // Sword
-      ctx.save();
-      ctx.translate(15, -10);
+      // Weapon - Sword or Gun
+      const hasGun = (p as any).hasGun;
+      
+      if (hasGun) {
+        // Draw gun instead of sword
+        ctx.save();
+        ctx.translate(25, 0);
+        
+        // Gun shape
+        ctx.fillStyle = '#fbbf24';
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 10;
+        // Barrel
+        ctx.fillRect(0, -5, 35, 10);
+        // Handle
+        ctx.fillRect(-5, -5, 12, 25);
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, -5, 35, 10);
+        ctx.strokeRect(-5, -5, 12, 25);
+        
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      } else {
+        // Draw sword
+        ctx.save();
+        ctx.translate(15, -10);
 
-      if (p.isAttacking) {
+        if (p.isAttacking) {
         const progress = 1 - (p.attackTimer / 0.2);
         const swingAngle = -Math.PI / 2 + (progress * Math.PI);
         ctx.rotate(swingAngle);
@@ -514,13 +614,14 @@ const GameCanvas: React.FC = () => {
         ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
         ctx.stroke();
         ctx.shadowBlur = 0;
-      } else {
-        ctx.rotate(Math.PI / 4);
-        ctx.drawImage(assets.sword, 0, -52, 104, 104);
-        ctx.restore();
-      }
+        } else {
+          ctx.rotate(Math.PI / 4);
+          ctx.drawImage(assets.sword, 0, -52, 104, 104);
+          ctx.restore();
+        }
 
-      ctx.restore();
+        ctx.restore();
+      } // End of sword drawing (hasGun else block)
 
       // UI: Player name/ID
       ctx.fillStyle = '#fff';

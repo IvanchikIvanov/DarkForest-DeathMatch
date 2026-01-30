@@ -41,6 +41,7 @@ interface Player extends Entity {
   attackTimer: number;
   attackCooldown: number;
   bombCooldown: number;
+  hasGun: boolean; // Has picked up gun
   score: number;
 }
 
@@ -78,6 +79,20 @@ interface HealthPickup {
   healAmount: number;
 }
 
+interface GunPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+interface Bullet {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  ownerId: string;
+  active: boolean;
+}
+
 interface GameState {
   players: Record<string, Player>;
   particles: Particle[];
@@ -85,11 +100,14 @@ interface GameState {
   bombs: Bomb[];
   obstacles: Obstacle[];
   healthPickups: HealthPickup[];
+  gunPickups: GunPickup[];
+  bullets: Bullet[];
   tileMap?: number[][];
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
   lastHealthSpawnTime: number;
+  lastGunSpawnTime: number;
 }
 
 interface PlayerInput {
@@ -118,9 +136,9 @@ const SWORD_ATTACK_DURATION = 0.2;
 const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
 const SWORD_ARC = Math.PI * 2;
 const SWORD_DAMAGE = 25;
-const SWORD_KNOCKBACK = 400; // Knockback distance when hit by sword
-const SWORD_KNOCKBACK_SPEED = 1800; // Knockback velocity speed - very strong
-const KNOCKBACK_FRICTION = 0.92; // Friction for smooth knockback decay (higher = longer)
+const SWORD_KNOCKBACK = 500; // Knockback distance when hit by sword
+const SWORD_KNOCKBACK_SPEED = 2500; // Knockback velocity speed - VERY strong
+const KNOCKBACK_FRICTION = 0.94; // Friction for smooth knockback decay (higher = longer)
 
 // Bomb constants
 const BOMB_DAMAGE = 25;
@@ -134,7 +152,15 @@ const BOMB_FLY_SPEED = 500; // Speed at which bomb flies
 const HEALTH_SPAWN_INTERVAL = 15; // Seconds between spawns
 const MAX_HEALTH_PICKUPS = 4;
 const HEALTH_HEAL_AMOUNT = 30;
-const HEALTH_PICKUP_RADIUS = 20;
+const HEALTH_PICKUP_RADIUS = 25; // Increased for visibility
+
+// Gun pickup constants
+const GUN_SPAWN_INTERVAL = 20; // Seconds between gun spawns
+const MAX_GUN_PICKUPS = 1; // Only 1 gun at a time
+const GUN_PICKUP_RADIUS = 25;
+const BULLET_SPEED = 1200;
+const BULLET_DAMAGE = 40;
+const BULLET_RADIUS = 8;
 
 // Terrain constants
 const WATER_SPEED_MOD = 0.5;
@@ -330,7 +356,22 @@ const createPlayer = (id: string, index: number): Player => ({
   attackTimer: 0,
   attackCooldown: 0,
   bombCooldown: 0,
+  hasGun: false,
   score: 0
+});
+
+const createGunPickup = (x: number, y: number): GunPickup => ({
+  id: `gun-${Math.random()}`,
+  pos: { x, y },
+  active: true
+});
+
+const createBullet = (pos: Vector2, angle: number, ownerId: string): Bullet => ({
+  id: `bullet-${Math.random()}`,
+  pos: { x: pos.x, y: pos.y },
+  vel: { x: Math.cos(angle) * BULLET_SPEED, y: Math.sin(angle) * BULLET_SPEED },
+  ownerId,
+  active: true
 });
 
 const createParticle = (pos: Vector2, color: string, speedMod: number, particleType?: 'blood' | 'spark' | 'explosion' | 'trail' | 'water'): Particle => {
@@ -440,8 +481,11 @@ export default class GameRoom implements Party.Server {
       bombs: [],
       obstacles: obstacles,
       healthPickups: [],
+      gunPickups: [],
+      bullets: [],
       tileMap: tileMap,
-      lastHealthSpawnTime: 0
+      lastHealthSpawnTime: 0,
+      lastGunSpawnTime: 0
     };
   }
 
@@ -488,8 +532,11 @@ export default class GameRoom implements Party.Server {
               bombs: [],
               obstacles: obstacles,
               healthPickups: [],
+              gunPickups: [],
+              bullets: [],
               tileMap: tileMap,
-              lastHealthSpawnTime: 0
+              lastHealthSpawnTime: 0,
+              lastGunSpawnTime: 0
             };
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
@@ -638,8 +685,76 @@ export default class GameRoom implements Party.Server {
       this.state.lastHealthSpawnTime = 0;
     }
 
+    // Spawn gun pickup every 20 seconds (max 1)
+    this.state.lastGunSpawnTime += DT;
+    if (this.state.lastGunSpawnTime >= GUN_SPAWN_INTERVAL && this.state.gunPickups.length < MAX_GUN_PICKUPS) {
+      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
+      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
+      this.state.gunPickups.push(createGunPickup(spawnX, spawnY));
+      this.state.lastGunSpawnTime = 0;
+    }
+
+    // Update bullets
+    let newBullets = this.state.bullets.filter(bullet => {
+      if (!bullet.active) return false;
+      
+      // Move bullet
+      bullet.pos.x += bullet.vel.x * DT;
+      bullet.pos.y += bullet.vel.y * DT;
+      
+      // Check if out of bounds
+      if (bullet.pos.x < 0 || bullet.pos.x > CANVAS_WIDTH || bullet.pos.y < 0 || bullet.pos.y > CANVAS_HEIGHT) {
+        return false;
+      }
+      
+      // Check collision with players
+      for (const pid of playerIds) {
+        if (pid === bullet.ownerId) continue; // Don't hit self
+        const target = this.state.players[pid];
+        if (!target.active) continue;
+        
+        const d = dist(bullet.pos, target.pos);
+        if (d < target.radius + BULLET_RADIUS) {
+          // HIT!
+          if (!target.isDodging && target.hp > 0) {
+            target.hp = Math.max(0, target.hp - BULLET_DAMAGE);
+            newShake += 15;
+            
+            // Blood splash
+            for (let i = 0; i < 25; i++) {
+              newParticles.push(createParticle(target.pos, '#dc2626', 12, 'blood'));
+            }
+            
+            // Knockback from bullet
+            const knockDir = normalize(bullet.vel);
+            target.knockbackVel.x = knockDir.x * 800;
+            target.knockbackVel.y = knockDir.y * 800;
+            
+            if (target.hp <= 0) {
+              target.active = false;
+              newShake += 15;
+              for (let i = 0; i < 30; i++) {
+                newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood'));
+              }
+            }
+          }
+          return false; // Remove bullet
+        }
+      }
+      
+      // Trail particles
+      if (Math.random() > 0.5) {
+        newParticles.push(createParticle(bullet.pos, '#fbbf24', 2, 'trail'));
+      }
+      
+      return true;
+    });
+
     // Update health pickups
     let newHealthPickups = this.state.healthPickups.filter(hp => hp.active);
+    
+    // Update gun pickups
+    let newGunPickups = this.state.gunPickups.filter(gp => gp.active);
 
     playerIds.forEach(pid => {
       const player = this.state.players[pid];
@@ -684,9 +799,22 @@ export default class GameRoom implements Party.Server {
         }
       }
 
-      // Attack
+      // Attack - if has gun, shoot instead of sword
       if (input.mouseDown && player.attackCooldown <= 0 && !player.isDodging && !player.isBlocking) {
-        player.isAttacking = true;
+        if (player.hasGun) {
+          // SHOOT GUN - creates bullet and removes gun
+          const bullet = createBullet(player.pos, player.angle || 0, pid);
+          newBullets.push(bullet);
+          player.hasGun = false; // Gun disappears after one shot
+          player.attackCooldown = 0.3; // Short cooldown
+          newShake += 5;
+          // Muzzle flash particles
+          for (let i = 0; i < 8; i++) {
+            newParticles.push(createParticle(player.pos, '#fbbf24', 6, 'spark'));
+          }
+        } else {
+          // Normal sword attack
+          player.isAttacking = true;
         player.attackTimer = SWORD_ATTACK_DURATION;
         player.attackCooldown = SWORD_COOLDOWN;
 
@@ -757,6 +885,7 @@ export default class GameRoom implements Party.Server {
             }
           }
         });
+        } // End of sword attack else block
       }
 
       if (player.attackTimer <= 0) player.isAttacking = false;
@@ -852,6 +981,22 @@ export default class GameRoom implements Party.Server {
         }
       });
 
+      // Gun pickup collision
+      newGunPickups.forEach(gp => {
+        if (!gp.active) return;
+        if (player.hasGun) return; // Already has gun
+        const d = dist(player.pos, gp.pos);
+        if (d < player.radius + GUN_PICKUP_RADIUS) {
+          // Pick up gun
+          player.hasGun = true;
+          gp.active = false;
+          // Yellow pickup particles
+          for (let i = 0; i < 12; i++) {
+            newParticles.push(createParticle(player.pos, '#fbbf24', 5, 'spark'));
+          }
+        }
+      });
+
       // Water splash particles
       if (this.state.tileMap) {
         const tile = getTileAt(this.state.tileMap, player.pos.x, player.pos.y);
@@ -882,6 +1027,8 @@ export default class GameRoom implements Party.Server {
     this.state.particles = newParticles;
     this.state.bombs = newBombs;
     this.state.healthPickups = newHealthPickups;
+    this.state.gunPickups = newGunPickups.filter(gp => gp.active);
+    this.state.bullets = newBullets;
     this.state.shake = newShake;
   }
 
