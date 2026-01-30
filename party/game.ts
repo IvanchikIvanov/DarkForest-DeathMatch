@@ -11,7 +11,9 @@ enum EntityType {
   PLAYER = 0,
   WALL = 1,
   PARTICLE = 2,
-  SWORD_HITBOX = 3
+  SWORD_HITBOX = 3,
+  BOMB = 4,
+  OBSTACLE = 5
 }
 
 interface Entity {
@@ -37,12 +39,14 @@ interface Player extends Entity {
   isAttacking: boolean;
   attackTimer: number;
   attackCooldown: number;
+  bombCooldown: number;
   score: number;
 }
 
 interface Particle extends Entity {
   life: number;
   decay: number;
+  particleType?: 'blood' | 'spark' | 'explosion' | 'trail' | 'water';
 }
 
 interface Wall extends Entity {
@@ -51,10 +55,27 @@ interface Wall extends Entity {
   height: number;
 }
 
+interface Bomb extends Entity {
+  type: EntityType.BOMB;
+  fuseTimer: number;
+  ownerId: string;
+}
+
+interface Obstacle {
+  id: string;
+  pos: Vector2;
+  obstacleType: 'tree' | 'rock' | 'bush';
+  hp: number;
+  radius: number;
+  destroyed: boolean;
+}
+
 interface GameState {
   players: Record<string, Player>;
   particles: Particle[];
   walls: Wall[];
+  bombs: Bomb[];
+  obstacles: Obstacle[];
   tileMap?: number[][];
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
@@ -66,6 +87,7 @@ interface PlayerInput {
   mouse: Vector2;
   mouseDown: boolean;
   mouseRightDown: boolean;
+  throwBomb: boolean;
 }
 
 // ============ CONSTANTS ============
@@ -75,8 +97,8 @@ const CANVAS_HEIGHT = 1800;
 const TILE_SIZE = 64;
 const DT = 1 / 60;
 const PLAYER_HP = 100;
-const PLAYER_SPEED = 150;
-const PLAYER_DODGE_SPEED = 500;
+const PLAYER_SPEED = 300; // Doubled from 150
+const PLAYER_DODGE_SPEED = 1000; // Doubled from 500
 const PLAYER_DODGE_DURATION = 0.3;
 const PLAYER_DODGE_COOLDOWN = 1.0;
 const PLAYER_BLOCK_SPEED_MOD = 0.4;
@@ -87,13 +109,36 @@ const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
 const SWORD_ARC = Math.PI * 2;
 const SWORD_DAMAGE = 25;
 
+// Bomb constants
+const BOMB_DAMAGE = 25;
+const BOMB_RADIUS = 120;
+const BOMB_FUSE_TIME = 2.0;
+const BOMB_COOLDOWN = 3.0;
+const BOMB_THROW_DISTANCE = 200;
+
+// Terrain constants
+const WATER_SPEED_MOD = 0.5;
+const BUSH_SPEED_MOD = 0.7;
+
+// Tile types
+const TILE_FLOOR = 0;
+const TILE_WALL = 1;
+const TILE_WALL_TOP = 2;
+const TILE_GRASS = 3;
+const TILE_WATER = 4;
+const TILE_BUSH = 5;
+const TILE_STONE = 6;
+
 const COLORS = {
   player: '#3b82f6',
   enemy: '#ef4444',
   wall: '#52525b',
   blood: '#dc2626',
   shield: '#fbbf24',
-  playerDodge: '#93c5fd'
+  playerDodge: '#93c5fd',
+  bomb: '#f97316',
+  explosion: '#fbbf24',
+  explosionInner: '#ef4444'
 };
 
 // Message types
@@ -130,38 +175,118 @@ const angleDiff = (a: number, b: number) => {
   return diff > Math.PI ? (Math.PI * 2) - diff : diff;
 };
 
-// Arena generation
-const generateArena = (): { walls: Wall[], tileMap: number[][] } => {
+// Seeded random for consistent arena generation
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+// Arena generation with terrain variety
+const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obstacle[] } => {
   const walls: Wall[] = [];
+  const obstacles: Obstacle[] = [];
   const cols = Math.ceil(CANVAS_WIDTH / TILE_SIZE);
   const rows = Math.ceil(CANVAS_HEIGHT / TILE_SIZE);
-  const tileMap: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
-  
+  const tileMap: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(TILE_FLOOR));
+
   const centerX = cols / 2;
   const centerY = rows / 2;
   const arenaRadius = Math.min(cols, rows) / 2 - 2;
 
+  let seed = 12345;
+
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const d = Math.hypot(x - centerX, y - centerY);
-      
+
       if (d > arenaRadius) {
-        tileMap[y][x] = 2; // Wall top
+        // Outside arena - Solid wall
+        tileMap[y][x] = TILE_WALL_TOP;
         if (y < rows - 1 && Math.hypot(x - centerX, (y + 1) - centerY) <= arenaRadius) {
-            tileMap[y][x] = 1; // Wall side
+          tileMap[y][x] = TILE_WALL;
         }
+      } else if (d > arenaRadius - 1) {
+        // Arena edge - floor
+        tileMap[y][x] = TILE_FLOOR;
       } else {
-          tileMap[y][x] = 0; // Floor
-          // Seeded random for consistent pillars if needed, but here we can just use regular random if it's only called on server
-          if (Math.random() > 0.98 && d < arenaRadius - 5) {
-              tileMap[y][x] = 2;
-              if (y < rows - 1) tileMap[y+1][x] = 1;
+        // Inside arena - varied terrain
+        seed++;
+        const rand = seededRandom(seed);
+
+        // Default to floor or grass
+        if (rand < 0.4) {
+          tileMap[y][x] = TILE_GRASS;
+        } else {
+          tileMap[y][x] = TILE_FLOOR;
+        }
+
+        // Add water pools (small clusters)
+        if (rand > 0.95 && d < arenaRadius - 5) {
+          // Create small water cluster
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const ny = y + dy;
+              const nx = x + dx;
+              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                const nd = Math.hypot(nx - centerX, ny - centerY);
+                if (nd < arenaRadius - 2) {
+                  tileMap[ny][nx] = TILE_WATER;
+                }
+              }
+            }
           }
+        }
+
+        // Add bush patches
+        if (rand > 0.92 && rand <= 0.95 && d < arenaRadius - 4) {
+          tileMap[y][x] = TILE_BUSH;
+        }
+
+        // Add stone obstacles (non-walkable)
+        if (rand > 0.985 && d < arenaRadius - 6 && d > 5) {
+          tileMap[y][x] = TILE_STONE;
+        }
+
+        // Add tree obstacles
+        if (rand > 0.975 && rand <= 0.985 && d < arenaRadius - 5 && d > 4) {
+          obstacles.push({
+            id: `tree-${x}-${y}`,
+            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+            obstacleType: 'tree',
+            hp: 50, // Can be destroyed by bombs
+            radius: 24,
+            destroyed: false
+          });
+        }
+
+        // Add rock obstacles
+        if (rand > 0.965 && rand <= 0.975 && d < arenaRadius - 5 && d > 4) {
+          obstacles.push({
+            id: `rock-${x}-${y}`,
+            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+            obstacleType: 'rock',
+            hp: -1, // Indestructible
+            radius: 28,
+            destroyed: false
+          });
+        }
+
+        // Add bush obstacles
+        if (rand > 0.955 && rand <= 0.965 && d < arenaRadius - 4 && d > 3) {
+          obstacles.push({
+            id: `bush-${x}-${y}`,
+            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
+            obstacleType: 'bush',
+            hp: 20, // Easily destroyed
+            radius: 20,
+            destroyed: false
+          });
+        }
       }
     }
   }
 
-  return { walls, tileMap };
+  return { walls, tileMap, obstacles };
 };
 
 const createPlayer = (id: string, index: number): Player => ({
@@ -186,10 +311,11 @@ const createPlayer = (id: string, index: number): Player => ({
   isAttacking: false,
   attackTimer: 0,
   attackCooldown: 0,
+  bombCooldown: 0,
   score: 0
 });
 
-const createParticle = (pos: Vector2, color: string, speedMod: number): Particle => {
+const createParticle = (pos: Vector2, color: string, speedMod: number, particleType?: 'blood' | 'spark' | 'explosion' | 'trail' | 'water'): Particle => {
   const angle = Math.random() * Math.PI * 2;
   const speed = Math.random() * 50 * speedMod;
   return {
@@ -201,30 +327,74 @@ const createParticle = (pos: Vector2, color: string, speedMod: number): Particle
     color: color,
     active: true,
     life: 1.0,
-    decay: Math.random() * 3 + 2
+    decay: Math.random() * 3 + 2,
+    particleType
   };
 };
 
+const createBomb = (pos: Vector2, ownerId: string, angle: number): Bomb => {
+  const throwX = pos.x + Math.cos(angle) * BOMB_THROW_DISTANCE;
+  const throwY = pos.y + Math.sin(angle) * BOMB_THROW_DISTANCE;
+  return {
+    id: `bomb-${Math.random()}`,
+    type: EntityType.BOMB,
+    pos: { x: throwX, y: throwY },
+    vel: { x: 0, y: 0 },
+    radius: 16,
+    color: COLORS.bomb,
+    active: true,
+    fuseTimer: BOMB_FUSE_TIME,
+    ownerId
+  };
+};
+
+const getTileAt = (tileMap: number[][], x: number, y: number): number => {
+  const tx = Math.floor(x / TILE_SIZE);
+  const ty = Math.floor(y / TILE_SIZE);
+  if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return TILE_WALL;
+  return tileMap[ty][tx];
+};
+
 const checkWallCollision = (player: Player, tileMap: number[][]): boolean => {
-    if (!tileMap) return false;
-    const checkPoint = (px: number, py: number) => {
-        const tx = Math.floor(px / TILE_SIZE);
-        const ty = Math.floor(py / TILE_SIZE);
-        if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return true;
-        return tileMap[ty][tx] !== 0;
-    };
-    const r = player.radius;
-    const points = [
-        { x: player.pos.x + r, y: player.pos.y },
-        { x: player.pos.x - r, y: player.pos.y },
-        { x: player.pos.x, y: player.pos.y + r },
-        { x: player.pos.x, y: player.pos.y - r },
-        { x: player.pos.x + r * 0.7, y: player.pos.y + r * 0.7 },
-        { x: player.pos.x - r * 0.7, y: player.pos.y + r * 0.7 },
-        { x: player.pos.x + r * 0.7, y: player.pos.y - r * 0.7 },
-        { x: player.pos.x - r * 0.7, y: player.pos.y - r * 0.7 },
-    ];
-    return points.some(p => checkPoint(p.x, p.y));
+  if (!tileMap) return false;
+  const checkPoint = (px: number, py: number) => {
+    const tx = Math.floor(px / TILE_SIZE);
+    const ty = Math.floor(py / TILE_SIZE);
+    if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return true;
+    const tile = tileMap[ty][tx];
+    // Wall, wall top, and stone are non-walkable
+    return tile === TILE_WALL || tile === TILE_WALL_TOP || tile === TILE_STONE;
+  };
+  const r = player.radius;
+  const points = [
+    { x: player.pos.x + r, y: player.pos.y },
+    { x: player.pos.x - r, y: player.pos.y },
+    { x: player.pos.x, y: player.pos.y + r },
+    { x: player.pos.x, y: player.pos.y - r },
+    { x: player.pos.x + r * 0.7, y: player.pos.y + r * 0.7 },
+    { x: player.pos.x - r * 0.7, y: player.pos.y + r * 0.7 },
+    { x: player.pos.x + r * 0.7, y: player.pos.y - r * 0.7 },
+    { x: player.pos.x - r * 0.7, y: player.pos.y - r * 0.7 },
+  ];
+  return points.some(p => checkPoint(p.x, p.y));
+};
+
+const checkObstacleCollision = (pos: Vector2, radius: number, obstacles: Obstacle[]): Obstacle | null => {
+  for (const obs of obstacles) {
+    if (obs.destroyed) continue;
+    const d = dist(pos, obs.pos);
+    if (d < radius + obs.radius) {
+      return obs;
+    }
+  }
+  return null;
+};
+
+const getTerrainSpeedModifier = (tileMap: number[][], pos: Vector2): number => {
+  const tile = getTileAt(tileMap, pos.x, pos.y);
+  if (tile === TILE_WATER) return WATER_SPEED_MOD;
+  if (tile === TILE_BUSH) return BUSH_SPEED_MOD;
+  return 1.0;
 };
 
 export default class GameRoom implements Party.Server {
@@ -234,13 +404,15 @@ export default class GameRoom implements Party.Server {
   gameLoop: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly room: Party.Room) {
-    const { walls, tileMap } = generateArena();
+    const { walls, tileMap, obstacles } = generateArena();
     this.state = {
       status: 'LOBBY',
       shake: 0,
       players: {},
       particles: [],
       walls: walls,
+      bombs: [],
+      obstacles: obstacles,
       tileMap: tileMap
     };
   }
@@ -278,13 +450,15 @@ export default class GameRoom implements Party.Server {
         case 'RESET':
           if (sender.id === this.hostId) {
             const playerIds = Object.keys(this.state.players);
-            const { walls, tileMap } = generateArena();
+            const { walls, tileMap, obstacles } = generateArena();
             this.state = {
               status: 'PLAYING',
               shake: 0,
               players: {},
               particles: [],
               walls: walls,
+              bombs: [],
+              obstacles: obstacles,
               tileMap: tileMap
             };
             playerIds.forEach((pid, idx) => {
@@ -333,10 +507,88 @@ export default class GameRoom implements Party.Server {
     if (this.state.status !== 'PLAYING') return;
 
     let newParticles = [...this.state.particles];
+    let newBombs = [...this.state.bombs];
     let newShake = Math.max(0, this.state.shake - 1);
     const playerIds = Object.keys(this.state.players);
     let activeCount = 0;
     let lastSurvivor = '';
+
+    // Update bombs
+    newBombs = newBombs.filter(bomb => {
+      bomb.fuseTimer -= DT;
+
+      // Add spark particles while fuse is burning
+      if (Math.random() > 0.7) {
+        newParticles.push(createParticle(
+          { x: bomb.pos.x, y: bomb.pos.y - 20 },
+          '#fbbf24',
+          2,
+          'spark'
+        ));
+      }
+
+      if (bomb.fuseTimer <= 0) {
+        // EXPLODE!
+        newShake += 20;
+
+        // Create explosion particles
+        for (let i = 0; i < 30; i++) {
+          newParticles.push(createParticle(bomb.pos, COLORS.explosion, 8, 'explosion'));
+        }
+        for (let i = 0; i < 15; i++) {
+          newParticles.push(createParticle(bomb.pos, COLORS.explosionInner, 6, 'explosion'));
+        }
+
+        // Damage players in radius
+        playerIds.forEach(pid => {
+          const player = this.state.players[pid];
+          if (!player.active) return;
+          const d = dist(bomb.pos, player.pos);
+          if (d < BOMB_RADIUS) {
+            // Damage falls off with distance
+            const damageMultiplier = 1 - (d / BOMB_RADIUS);
+            const damage = Math.floor(BOMB_DAMAGE * damageMultiplier);
+            if (!player.isDodging && player.hp > 0) {
+              player.hp = Math.max(0, player.hp - damage);
+              for (let i = 0; i < 8; i++) {
+                newParticles.push(createParticle(player.pos, COLORS.blood, 5, 'blood'));
+              }
+              // Knockback
+              const knockDir = normalize({ x: player.pos.x - bomb.pos.x, y: player.pos.y - bomb.pos.y });
+              player.pos.x += knockDir.x * 60 * damageMultiplier;
+              player.pos.y += knockDir.y * 60 * damageMultiplier;
+
+              if (player.hp <= 0) {
+                player.active = false;
+                newShake += 10;
+                for (let i = 0; i < 15; i++) {
+                  newParticles.push(createParticle(player.pos, COLORS.blood, 8, 'blood'));
+                }
+              }
+            }
+          }
+        });
+
+        // Damage obstacles
+        this.state.obstacles.forEach(obs => {
+          if (obs.destroyed || obs.hp < 0) return;
+          const d = dist(bomb.pos, obs.pos);
+          if (d < BOMB_RADIUS + obs.radius) {
+            obs.hp -= BOMB_DAMAGE;
+            if (obs.hp <= 0) {
+              obs.destroyed = true;
+              // Destruction particles
+              for (let i = 0; i < 10; i++) {
+                newParticles.push(createParticle(obs.pos, obs.obstacleType === 'tree' ? '#22c55e' : '#78716c', 4));
+              }
+            }
+          }
+        });
+
+        return false; // Remove bomb
+      }
+      return true;
+    });
 
     playerIds.forEach(pid => {
       const player = this.state.players[pid];
@@ -344,23 +596,56 @@ export default class GameRoom implements Party.Server {
       activeCount++;
       lastSurvivor = pid;
 
-      const input = this.inputs[pid] || { keys: [], mouse: player.pos, mouseDown: false, mouseRightDown: false };
+      const input = this.inputs[pid] || { keys: [], mouse: player.pos, mouseDown: false, mouseRightDown: false, throwBomb: false };
       const keySet = new Set(input.keys);
 
+      // Cooldowns
       player.attackCooldown = Math.max(0, player.attackCooldown - DT);
       player.cooldown = Math.max(0, player.cooldown - DT);
       player.attackTimer = Math.max(0, player.attackTimer - DT);
+      player.bombCooldown = Math.max(0, player.bombCooldown - DT);
 
+      // Aiming
       const dx = input.mouse.x - player.pos.x;
       const dy = input.mouse.y - player.pos.y;
       player.angle = Math.atan2(dy, dx);
 
+      // Blocking
       player.isBlocking = input.mouseRightDown && !player.isAttacking && !player.isDodging;
 
+      // Bomb throwing (E key)
+      if (input.throwBomb && player.bombCooldown <= 0 && !player.isDodging) {
+        const bomb = createBomb(player.pos, pid, player.angle || 0);
+        // Check if bomb lands on valid terrain
+        if (this.state.tileMap) {
+          const tile = getTileAt(this.state.tileMap, bomb.pos.x, bomb.pos.y);
+          if (tile !== TILE_WALL && tile !== TILE_WALL_TOP && tile !== TILE_STONE) {
+            newBombs.push(bomb);
+            player.bombCooldown = BOMB_COOLDOWN;
+          }
+        } else {
+          newBombs.push(bomb);
+          player.bombCooldown = BOMB_COOLDOWN;
+        }
+      }
+
+      // Attack
       if (input.mouseDown && player.attackCooldown <= 0 && !player.isDodging && !player.isBlocking) {
         player.isAttacking = true;
         player.attackTimer = SWORD_ATTACK_DURATION;
         player.attackCooldown = SWORD_COOLDOWN;
+
+        // Sword trail particles
+        for (let i = 0; i < 3; i++) {
+          const trailAngle = (player.angle || 0) + (Math.random() - 0.5) * 0.5;
+          const trailDist = 40 + Math.random() * 20;
+          newParticles.push(createParticle(
+            { x: player.pos.x + Math.cos(trailAngle) * trailDist, y: player.pos.y + Math.sin(trailAngle) * trailDist },
+            '#ffffff',
+            2,
+            'trail'
+          ));
+        }
 
         playerIds.forEach(targetId => {
           if (targetId === pid) return;
@@ -384,19 +669,19 @@ export default class GameRoom implements Party.Server {
 
               if (blocked) {
                 newShake += 5;
-                for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4));
+                for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4, 'spark'));
                 const pushDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
                 target.pos.x += pushDir.x * 40;
                 target.pos.y += pushDir.y * 40;
               } else if (!target.isDodging && target.hp > 0) {
                 target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
                 newShake += 10;
-                for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6));
+                for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6, 'blood'));
 
                 if (target.hp <= 0) {
                   target.active = false;
                   newShake += 10;
-                  for (let i = 0; i < 15; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 8));
+                  for (let i = 0; i < 15; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 8, 'blood'));
                 }
               }
             }
@@ -406,6 +691,7 @@ export default class GameRoom implements Party.Server {
 
       if (player.attackTimer <= 0) player.isAttacking = false;
 
+      // Dodge
       if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0 && !player.isBlocking) {
         player.isDodging = true;
         player.dodgeTimer = PLAYER_DODGE_DURATION;
@@ -424,7 +710,7 @@ export default class GameRoom implements Party.Server {
         }
         player.vel = { x: dashDir.x * PLAYER_DODGE_SPEED, y: dashDir.y * PLAYER_DODGE_SPEED };
 
-        for (let i = 0; i < 3; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 2));
+        for (let i = 0; i < 5; i++) newParticles.push(createParticle(player.pos, COLORS.playerDodge, 3, 'trail'));
       }
 
       if (player.isDodging) {
@@ -445,6 +731,11 @@ export default class GameRoom implements Party.Server {
         if (player.isBlocking) speed *= PLAYER_BLOCK_SPEED_MOD;
         if (player.isAttacking) speed *= 0.2;
 
+        // Apply terrain speed modifier
+        if (this.state.tileMap) {
+          speed *= getTerrainSpeedModifier(this.state.tileMap, player.pos);
+        }
+
         player.vel = { x: moveDir.x * speed, y: moveDir.y * speed };
       }
 
@@ -454,15 +745,32 @@ export default class GameRoom implements Party.Server {
       player.pos.x += player.vel.x * DT;
       player.pos.y += player.vel.y * DT;
 
+      // Wall collision
       if (this.state.tileMap && checkWallCollision(player, this.state.tileMap)) {
+        player.pos.x = oldX;
+        player.pos.y = oldY;
+      }
+
+      // Obstacle collision
+      const collidedObstacle = checkObstacleCollision(player.pos, player.radius, this.state.obstacles);
+      if (collidedObstacle) {
         player.pos.x = oldX;
         player.pos.y = oldY;
       }
 
       player.pos.x = clamp(player.pos.x, player.radius, CANVAS_WIDTH - player.radius);
       player.pos.y = clamp(player.pos.y, player.radius, CANVAS_HEIGHT - player.radius);
+
+      // Water splash particles
+      if (this.state.tileMap) {
+        const tile = getTileAt(this.state.tileMap, player.pos.x, player.pos.y);
+        if (tile === TILE_WATER && Math.random() > 0.9 && (player.vel.x !== 0 || player.vel.y !== 0)) {
+          newParticles.push(createParticle(player.pos, '#60a5fa', 1, 'water'));
+        }
+      }
     });
 
+    // Update particles
     newParticles.forEach(p => {
       p.pos.x += p.vel.x * DT;
       p.pos.y += p.vel.y * DT;
@@ -470,6 +778,7 @@ export default class GameRoom implements Party.Server {
     });
     newParticles = newParticles.filter(p => p.life > 0);
 
+    // Victory check
     if (activeCount === 1 && playerIds.length > 1) {
       this.state.status = 'VICTORY';
       this.state.winnerId = lastSurvivor;
@@ -477,6 +786,7 @@ export default class GameRoom implements Party.Server {
     }
 
     this.state.particles = newParticles;
+    this.state.bombs = newBombs;
     this.state.shake = newShake;
   }
 

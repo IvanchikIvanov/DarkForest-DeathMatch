@@ -101,7 +101,7 @@ export class PartyClient {
     }
 
     // Send player input
-    sendInput(input: { keys: string[], mouse: { x: number, y: number }, mouseDown: boolean, mouseRightDown: boolean }): void {
+    sendInput(input: { keys: string[], mouse: { x: number, y: number }, mouseDown: boolean, mouseRightDown: boolean, throwBomb: boolean }): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
 
         this.socket.send(JSON.stringify({

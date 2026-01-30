@@ -1,10 +1,10 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP } from '../constants';
-import { GameState, PlayerInput, GameAssets } from '../types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS } from '../constants';
+import { GameState, PlayerInput, GameAssets, Bomb, Obstacle } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
 import { generateAssets } from '../utils/assetGenerator';
-import { Trophy, Users, Copy, Play, Shield, Sword, User } from 'lucide-react';
+import { Trophy, Users, Copy, Play, Shield, Sword, User, Bomb as BombIcon } from 'lucide-react';
 import WalletConnect from './WalletConnect';
 import BetSelector from './BetSelector';
 import { checkConnection, getCurrentAddress, MIN_BET, MAX_BET } from '../utils/web3';
@@ -23,6 +23,10 @@ const GameCanvas: React.FC = () => {
   const mouseRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
   const mouseDownRef = useRef<boolean>(false);
   const mouseRightDownRef = useRef<boolean>(false);
+  const throwBombRef = useRef<boolean>(false);
+
+  // Animation time for water effects
+  const timeRef = useRef<number>(0);
 
   // PartyKit client
   const partyClientRef = useRef<PartyClient | null>(null);
@@ -76,7 +80,6 @@ const GameCanvas: React.FC = () => {
           assetsLoaded: true,
           winner: state.winnerId || ''
         });
-        // Update host status
         if (hostId && playerIdRef.current) {
           setIsHost(hostId === playerIdRef.current);
         }
@@ -143,7 +146,6 @@ const GameCanvas: React.FC = () => {
 
     setIsCreatingRoom(true);
     try {
-      // Create room in smart contract (if available and wallet connected)
       if (walletConnected) {
         const contractRoomId = await createContractRoom(selectedBet);
         if (contractRoomId !== null) {
@@ -152,7 +154,6 @@ const GameCanvas: React.FC = () => {
       }
       setRoomBetAmount(selectedBet);
 
-      // Create PartyKit room with generated ID
       const newRoomId = generateRoomId();
       setRoomId(newRoomId);
       partyClientRef.current?.connect(newRoomId);
@@ -161,7 +162,6 @@ const GameCanvas: React.FC = () => {
     } catch (error: any) {
       console.error('Error creating room:', error);
       setIsCreatingRoom(false);
-      // Still create PartyKit room even if contract fails
       const newRoomId = generateRoomId();
       setRoomId(newRoomId);
       partyClientRef.current?.connect(newRoomId);
@@ -189,7 +189,6 @@ const GameCanvas: React.FC = () => {
         await joinRoom(parseInt(inputRoomId), betAmount);
       }
 
-      // Join PartyKit room
       setRoomId(inputRoomId);
       partyClientRef.current?.connect(inputRoomId);
 
@@ -197,7 +196,6 @@ const GameCanvas: React.FC = () => {
     } catch (error: any) {
       console.error('Error joining room:', error);
       setIsJoiningRoom(false);
-      // Still join PartyKit room even if contract fails
       setRoomId(inputRoomId);
       partyClientRef.current?.connect(inputRoomId);
     }
@@ -214,8 +212,21 @@ const GameCanvas: React.FC = () => {
   };
 
   // --- Input Handlers ---
-  const handleKeyDown = useCallback((e: KeyboardEvent) => { keysRef.current.add(e.key.toLowerCase()); }, []);
-  const handleKeyUp = useCallback((e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()); }, []);
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    keysRef.current.add(e.key.toLowerCase());
+    // E key for bomb
+    if (e.key.toLowerCase() === 'e') {
+      throwBombRef.current = true;
+    }
+  }, []);
+
+  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+    keysRef.current.delete(e.key.toLowerCase());
+    if (e.key.toLowerCase() === 'e') {
+      throwBombRef.current = false;
+    }
+  }, []);
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
@@ -238,6 +249,7 @@ const GameCanvas: React.FC = () => {
       };
     }
   }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (e.button === 0) {
@@ -246,6 +258,7 @@ const GameCanvas: React.FC = () => {
       mouseRightDownRef.current = true;
     }
   }, []);
+
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (e.button === 0) {
       mouseDownRef.current = false;
@@ -253,6 +266,7 @@ const GameCanvas: React.FC = () => {
       mouseRightDownRef.current = false;
     }
   }, []);
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
   }, []);
@@ -265,6 +279,8 @@ const GameCanvas: React.FC = () => {
       ctx.fillRect(0, 0, 800, 600);
       return;
     }
+
+    timeRef.current += 0.016;
 
     const canvasWidth = canvasRef.current?.width || 800;
     const canvasHeight = canvasRef.current?.height || 600;
@@ -285,24 +301,93 @@ const GameCanvas: React.FC = () => {
     ctx.translate(offsetX + shakeX, offsetY + shakeY);
     ctx.scale(scale, scale);
 
-    // TileMap
+    // TileMap with animated water
     if (state.tileMap) {
       for (let y = 0; y < state.tileMap.length; y++) {
         for (let x = 0; x < state.tileMap[y].length; x++) {
           const tileIdx = state.tileMap[y][x];
           const tile = assets.tiles[tileIdx];
           if (tile) {
-            ctx.drawImage(tile, x * 64, y * 64, 64, 64);
+            ctx.drawImage(tile, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+            // Animated water effect
+            if (tileIdx === 4) { // Water tile
+              const waveOffset = Math.sin(timeRef.current * 2 + x * 0.5 + y * 0.3) * 2;
+              ctx.fillStyle = 'rgba(96, 165, 250, 0.3)';
+              ctx.beginPath();
+              ctx.arc(
+                x * TILE_SIZE + TILE_SIZE / 2 + waveOffset,
+                y * TILE_SIZE + TILE_SIZE / 2,
+                8 + Math.sin(timeRef.current * 3) * 2,
+                0, Math.PI * 2
+              );
+              ctx.fill();
+            }
           }
         }
       }
     } else {
-      // Fallback: Floor
       const pattern = ctx.createPattern(assets.floor, 'repeat');
       if (pattern) {
         ctx.fillStyle = pattern;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
+    }
+
+    // Draw Obstacles
+    if (state.obstacles) {
+      state.obstacles.forEach((obs: Obstacle) => {
+        if (obs.destroyed) return;
+
+        ctx.save();
+        ctx.translate(obs.pos.x, obs.pos.y);
+
+        const obsSize = obs.radius * 2.5;
+        if (obs.obstacleType === 'tree') {
+          ctx.drawImage(assets.tree, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+        } else if (obs.obstacleType === 'rock') {
+          ctx.drawImage(assets.rock, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+        } else if (obs.obstacleType === 'bush') {
+          ctx.drawImage(assets.bush, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+        }
+
+        ctx.restore();
+      });
+    }
+
+    // Draw Bombs
+    if (state.bombs) {
+      state.bombs.forEach((bomb: Bomb) => {
+        ctx.save();
+        ctx.translate(bomb.pos.x, bomb.pos.y);
+
+        // Pulsing effect based on fuse timer
+        const pulse = 1 + Math.sin(timeRef.current * 10) * 0.1 * (1 - bomb.fuseTimer / 2);
+        ctx.scale(pulse, pulse);
+
+        // Draw bomb sprite
+        const bombSize = 40;
+        ctx.drawImage(assets.bomb, -bombSize / 2, -bombSize / 2, bombSize, bombSize);
+
+        // Draw fuse spark
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, -25, 4 + Math.random() * 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw danger radius indicator when close to exploding
+        if (bomb.fuseTimer < 1) {
+          ctx.strokeStyle = `rgba(239, 68, 68, ${0.5 * (1 - bomb.fuseTimer)})`;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.arc(0, 0, BOMB_RADIUS, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.restore();
+      });
     }
 
     // Draw Players
@@ -312,24 +397,49 @@ const GameCanvas: React.FC = () => {
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate(p.angle || 0);
 
+      // Player outline for better visibility
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Dodge effect
+      if (p.isDodging) {
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = COLORS.playerDodge;
+        ctx.beginPath();
+        ctx.arc(0, 0, p.radius + 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
       const pSize = p.radius * 2.5;
-      ctx.drawImage(assets.player, -pSize / 2, -pSize / 2, pSize, pSize);
+      const isMe = p.playerId === playerIdRef.current;
+
+      // Use different sprites for players
+      const playerSprite = isMe ? assets.player : assets.playerEnemy;
+      ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
 
       // Shield
       if (p.isBlocking) {
         ctx.save();
         ctx.translate(10, 10);
         ctx.rotate(Math.PI / 4);
-        ctx.drawImage(assets.shield, -12, -12, 24, 24);
+        ctx.drawImage(assets.shield, -14, -14, 28, 28);
         ctx.restore();
 
+        // Shield arc effect
         ctx.beginPath();
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 2;
-        ctx.arc(0, 0, p.radius + 15, -Math.PI / 3, Math.PI / 3);
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 10;
+        ctx.arc(0, 0, p.radius + 18, -Math.PI / 3, Math.PI / 3);
         ctx.stroke();
+        ctx.shadowBlur = 0;
       } else {
-        ctx.drawImage(assets.shield, -10, 5, 16, 16);
+        ctx.drawImage(assets.shield, -10, 5, 18, 18);
       }
 
       // Sword
@@ -340,48 +450,121 @@ const GameCanvas: React.FC = () => {
         const progress = 1 - (p.attackTimer / 0.2);
         const swingAngle = -Math.PI / 2 + (progress * Math.PI);
         ctx.rotate(swingAngle);
-        ctx.drawImage(assets.sword, 0, -48, 96, 96);
+
+        // Sword trail effect
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        ctx.drawImage(assets.sword, 0, -52, 104, 104);
 
         ctx.restore();
+
+        // Additional swing arc
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.lineWidth = 4;
-        ctx.arc(0, 0, 50, -Math.PI / 2, Math.PI / 3);
+        ctx.shadowColor = '#fff';
+        ctx.shadowBlur = 8;
+        ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
         ctx.stroke();
+        ctx.shadowBlur = 0;
       } else {
         ctx.rotate(Math.PI / 4);
-        ctx.drawImage(assets.sword, 0, -48, 96, 96);
+        ctx.drawImage(assets.sword, 0, -52, 104, 104);
         ctx.restore();
       }
 
       ctx.restore();
 
-      // UI: ID
+      // UI: Player name/ID
       ctx.fillStyle = '#fff';
-      ctx.font = '8px "Press Start 2P"';
+      ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
-      const isMe = p.playerId === playerIdRef.current;
-      ctx.fillText(isMe ? 'YOU' : `P${p.playerId.slice(0, 4)}`, p.pos.x, p.pos.y - 30);
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 4;
+      ctx.fillText(isMe ? 'YOU' : `P${p.playerId.slice(0, 4)}`, p.pos.x, p.pos.y - 35);
+      ctx.shadowBlur = 0;
 
-      // UI: HP Bar
+      // UI: HP Bar with gradient
       const hpPercent = (p.hp || 0) / (p.maxHp || 100);
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(p.pos.x - 20, p.pos.y + 20, 40, 4);
-      ctx.fillStyle = hpPercent > 0.5 ? '#22c55e' : hpPercent > 0.25 ? '#eab308' : '#dc2626';
-      ctx.fillRect(p.pos.x - 20, p.pos.y + 20, 40 * hpPercent, 4);
+      const hpBarWidth = 44;
+      const hpBarHeight = 6;
 
-      // UI: Stamina
+      // Background
+      ctx.fillStyle = '#1f1f1f';
+      ctx.fillRect(p.pos.x - hpBarWidth / 2 - 2, p.pos.y + 22, hpBarWidth + 4, hpBarHeight + 4);
+
+      // HP fill
+      const hpGradient = ctx.createLinearGradient(p.pos.x - hpBarWidth / 2, 0, p.pos.x + hpBarWidth / 2, 0);
+      if (hpPercent > 0.5) {
+        hpGradient.addColorStop(0, '#22c55e');
+        hpGradient.addColorStop(1, '#4ade80');
+      } else if (hpPercent > 0.25) {
+        hpGradient.addColorStop(0, '#eab308');
+        hpGradient.addColorStop(1, '#facc15');
+      } else {
+        hpGradient.addColorStop(0, '#dc2626');
+        hpGradient.addColorStop(1, '#ef4444');
+      }
+      ctx.fillStyle = hpGradient;
+      ctx.fillRect(p.pos.x - hpBarWidth / 2, p.pos.y + 24, hpBarWidth * hpPercent, hpBarHeight);
+
+      // Border
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(p.pos.x - hpBarWidth / 2 - 1, p.pos.y + 23, hpBarWidth + 2, hpBarHeight + 2);
+
+      // Stamina bar (dodge cooldown)
       if (p.cooldown > 0) {
-        ctx.fillStyle = '#60a5fa';
-        ctx.fillRect(p.pos.x - 15, p.pos.y + 26, 30 * (1 - p.cooldown), 3);
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(p.pos.x - 15, p.pos.y + 32, 30 * (1 - p.cooldown), 3);
+      }
+
+      // Bomb cooldown indicator
+      const bombCooldown = (p as any).bombCooldown || 0;
+      if (bombCooldown > 0) {
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(p.pos.x - 15, p.pos.y + 36, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
       }
     });
 
-    // Particles
+    // Particles with enhanced effects
     state.particles.forEach(pt => {
       ctx.globalAlpha = pt.life;
-      ctx.fillStyle = pt.color;
-      ctx.fillRect(pt.pos.x, pt.pos.y, pt.radius, pt.radius);
+
+      const particleType = (pt as any).particleType;
+
+      if (particleType === 'explosion') {
+        // Explosion particles - larger and brighter
+        const explosionSize = pt.radius * 3;
+        const gradient = ctx.createRadialGradient(pt.pos.x, pt.pos.y, 0, pt.pos.x, pt.pos.y, explosionSize);
+        gradient.addColorStop(0, pt.color);
+        gradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(pt.pos.x, pt.pos.y, explosionSize, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (particleType === 'trail') {
+        // Sword trail - white streaks
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.pos.x - 1, pt.pos.y - 4, 2, 8);
+      } else if (particleType === 'water') {
+        // Water splash - blue circles
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.pos.x, pt.pos.y, pt.radius * 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Default particles
+        ctx.fillStyle = pt.color;
+        ctx.fillRect(pt.pos.x, pt.pos.y, pt.radius * 1.5, pt.radius * 1.5);
+      }
+
       ctx.globalAlpha = 1.0;
     });
 
@@ -397,26 +580,30 @@ const GameCanvas: React.FC = () => {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // Cursor
+    // Custom cursor
     if (state.status === 'PLAYING') {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const canvasWidth = canvasRef.current?.width || 800;
-      const canvasHeight = canvasRef.current?.height || 600;
-      const scaleX = canvasWidth / CANVAS_WIDTH;
-      const scaleY = canvasHeight / CANVAS_HEIGHT;
-      const scale = Math.min(scaleX, scaleY);
-      const scaledWidth = CANVAS_WIDTH * scale;
-      const scaledHeight = CANVAS_HEIGHT * scale;
-      const offsetX = (canvasWidth - scaledWidth) / 2;
-      const offsetY = (canvasHeight - scaledHeight) / 2;
-
       const mx = offsetX + mouseRef.current.x * scale;
       const my = offsetY + mouseRef.current.y * scale;
-      ctx.fillStyle = '#ef4444';
+
+      // Crosshair cursor
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(mx, my, 4 / scale, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(mx, my, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mx - 12, my);
+      ctx.lineTo(mx - 4, my);
+      ctx.moveTo(mx + 4, my);
+      ctx.lineTo(mx + 12, my);
+      ctx.moveTo(mx, my - 12);
+      ctx.lineTo(mx, my - 4);
+      ctx.moveTo(mx, my + 4);
+      ctx.lineTo(mx, my + 12);
+      ctx.stroke();
+
       ctx.restore();
     }
   };
@@ -433,8 +620,11 @@ const GameCanvas: React.FC = () => {
         keys: Array.from(keysRef.current),
         mouse: mouseRef.current,
         mouseDown: mouseDownRef.current,
-        mouseRightDown: mouseRightDownRef.current
+        mouseRightDown: mouseRightDownRef.current,
+        throwBomb: throwBombRef.current
       });
+      // Reset bomb throw after sending
+      throwBombRef.current = false;
     }
 
     // Handle contract game finish
@@ -502,7 +692,7 @@ const GameCanvas: React.FC = () => {
       {/* Connection Status */}
       {connectionError && (
         <div className="absolute top-4 left-4 bg-red-900/80 text-red-200 px-3 py-2 rounded text-sm">
-          ⚠️ {connectionError}
+          {connectionError}
         </div>
       )}
 
@@ -512,6 +702,7 @@ const GameCanvas: React.FC = () => {
         <div className="flex items-center gap-2">ATTACK <kbd className="bg-zinc-800 p-1 rounded">L-CLICK</kbd></div>
         <div className="flex items-center gap-2">BLOCK <kbd className="bg-zinc-800 p-1 rounded">R-CLICK</kbd></div>
         <div className="flex items-center gap-2">DODGE <kbd className="bg-zinc-800 p-1 rounded">SPACE</kbd></div>
+        <div className="flex items-center gap-2 text-orange-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-orange-400">E</kbd></div>
       </div>
 
       {/* Connect Wallet Modal */}
