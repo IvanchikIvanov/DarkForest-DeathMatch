@@ -398,6 +398,37 @@ const GameCanvas: React.FC = () => {
       });
     }
 
+    // Draw Health Pickups
+    if ((state as any).healthPickups) {
+      (state as any).healthPickups.forEach((hp: any) => {
+        if (!hp.active) return;
+        ctx.save();
+        ctx.translate(hp.pos.x, hp.pos.y);
+        
+        // Pulsing glow effect
+        const pulse = 1 + Math.sin(timeRef.current * 3) * 0.15;
+        ctx.scale(pulse, pulse);
+        
+        // Green glow
+        ctx.shadowColor = '#22c55e';
+        ctx.shadowBlur = 20;
+        
+        // Green cross (health symbol)
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(-20, -6, 40, 12); // Horizontal
+        ctx.fillRect(-6, -20, 12, 40); // Vertical
+        
+        // White outline
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-20, -6, 40, 12);
+        ctx.strokeRect(-6, -20, 12, 40);
+        
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+    }
+
     // Draw Players
     Object.values(state.players).forEach(p => {
       if (!p.active) return;
@@ -429,27 +460,27 @@ const GameCanvas: React.FC = () => {
       const playerSprite = isMe ? assets.player : assets.playerEnemy;
       ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
 
-      // Shield - bigger and more visible
+      // Shield - 3x bigger
       if (p.isBlocking) {
         ctx.save();
-        ctx.translate(12, 12);
+        ctx.translate(20, 20);
         ctx.rotate(Math.PI / 4);
-        // Larger shield when blocking
-        ctx.drawImage(assets.shield, -24, -24, 48, 48);
+        // Shield 3x larger when blocking (was 48, now 144)
+        ctx.drawImage(assets.shield, -72, -72, 144, 144);
         ctx.restore();
 
-        // Shield arc effect - more visible
+        // Shield arc effect - much more visible
         ctx.beginPath();
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 10;
         ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 15;
-        ctx.arc(0, 0, p.radius + 25, -Math.PI / 3, Math.PI / 3);
+        ctx.shadowBlur = 30;
+        ctx.arc(0, 0, p.radius + 60, -Math.PI / 2.5, Math.PI / 2.5);
         ctx.stroke();
         ctx.shadowBlur = 0;
       } else {
-        // Larger shield when not blocking too
-        ctx.drawImage(assets.shield, -14, 5, 28, 28);
+        // Shield 3x larger when not blocking (was 28, now 84)
+        ctx.drawImage(assets.shield, -42, 15, 84, 84);
       }
 
       // Sword
@@ -529,17 +560,30 @@ const GameCanvas: React.FC = () => {
       ctx.lineWidth = 1;
       ctx.strokeRect(p.pos.x - hpBarWidth / 2 - 1, p.pos.y + 23, hpBarWidth + 2, hpBarHeight + 2);
 
-      // Stamina bar (dodge cooldown)
-      if (p.cooldown > 0) {
-        ctx.fillStyle = '#3b82f6';
-        ctx.fillRect(p.pos.x - 15, p.pos.y + 32, 30 * (1 - p.cooldown), 3);
-      }
+      // WHITE dodge recovery bar (above HP bar)
+      const dodgeCooldown = p.cooldown || 0;
+      const dodgeBarWidth = 44;
+      const dodgeBarY = p.pos.y - 45;
+      
+      // Background
+      ctx.fillStyle = '#333';
+      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
+      
+      // Recovery fill (white) - fills up as cooldown recovers
+      const dodgeReady = 1 - dodgeCooldown;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth * dodgeReady, 4);
+      
+      // Border
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
 
-      // Bomb cooldown indicator
+      // Bomb cooldown indicator (pink)
       const bombCooldown = (p as any).bombCooldown || 0;
       if (bombCooldown > 0) {
         ctx.fillStyle = '#ec4899';
-        ctx.fillRect(p.pos.x - 15, p.pos.y + 36, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
+        ctx.fillRect(p.pos.x - 15, p.pos.y + 32, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
       }
     });
 

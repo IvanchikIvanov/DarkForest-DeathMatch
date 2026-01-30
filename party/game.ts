@@ -35,6 +35,7 @@ interface Player extends Entity {
   isDodging: boolean;
   dodgeTimer: number;
   cooldown: number;
+  knockbackVel: Vector2;
   isBlocking: boolean;
   isAttacking: boolean;
   attackTimer: number;
@@ -70,16 +71,25 @@ interface Obstacle {
   destroyed: boolean;
 }
 
+interface HealthPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+  healAmount: number;
+}
+
 interface GameState {
   players: Record<string, Player>;
   particles: Particle[];
   walls: Wall[];
   bombs: Bomb[];
   obstacles: Obstacle[];
+  healthPickups: HealthPickup[];
   tileMap?: number[][];
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
+  lastHealthSpawnTime: number;
 }
 
 interface PlayerInput {
@@ -117,7 +127,14 @@ const BOMB_DAMAGE = 25;
 const BOMB_RADIUS = 120;
 const BOMB_FUSE_TIME = 2.0;
 const BOMB_COOLDOWN = 3.0;
-const BOMB_THROW_DISTANCE = 200;
+const BOMB_THROW_DISTANCE = 300;
+const BOMB_FLY_SPEED = 500; // Speed at which bomb flies
+
+// Health pickup constants
+const HEALTH_SPAWN_INTERVAL = 15; // Seconds between spawns
+const MAX_HEALTH_PICKUPS = 4;
+const HEALTH_HEAL_AMOUNT = 30;
+const HEALTH_PICKUP_RADIUS = 20;
 
 // Terrain constants
 const WATER_SPEED_MOD = 0.5;
@@ -306,6 +323,7 @@ const createPlayer = (id: string, index: number): Player => ({
   isDodging: false,
   dodgeTimer: 0,
   cooldown: 0,
+  knockbackVel: { x: 0, y: 0 },
   angle: index === 0 ? 0 : Math.PI,
   isBlocking: false,
   isAttacking: false,
@@ -333,13 +351,12 @@ const createParticle = (pos: Vector2, color: string, speedMod: number, particleT
 };
 
 const createBomb = (pos: Vector2, ownerId: string, angle: number): Bomb => {
-  const throwX = pos.x + Math.cos(angle) * BOMB_THROW_DISTANCE;
-  const throwY = pos.y + Math.sin(angle) * BOMB_THROW_DISTANCE;
+  // Bomb starts at player position and flies toward target
   return {
     id: `bomb-${Math.random()}`,
     type: EntityType.BOMB,
-    pos: { x: throwX, y: throwY },
-    vel: { x: 0, y: 0 },
+    pos: { x: pos.x, y: pos.y },
+    vel: { x: Math.cos(angle) * BOMB_FLY_SPEED, y: Math.sin(angle) * BOMB_FLY_SPEED },
     radius: 16,
     color: COLORS.bomb,
     active: true,
@@ -347,6 +364,13 @@ const createBomb = (pos: Vector2, ownerId: string, angle: number): Bomb => {
     ownerId
   };
 };
+
+const createHealthPickup = (x: number, y: number): HealthPickup => ({
+  id: `health-${Math.random()}`,
+  pos: { x, y },
+  active: true,
+  healAmount: HEALTH_HEAL_AMOUNT
+});
 
 const getTileAt = (tileMap: number[][], x: number, y: number): number => {
   const tx = Math.floor(x / TILE_SIZE);
@@ -413,7 +437,9 @@ export default class GameRoom implements Party.Server {
       walls: walls,
       bombs: [],
       obstacles: obstacles,
-      tileMap: tileMap
+      healthPickups: [],
+      tileMap: tileMap,
+      lastHealthSpawnTime: 0
     };
   }
 
@@ -459,7 +485,9 @@ export default class GameRoom implements Party.Server {
               walls: walls,
               bombs: [],
               obstacles: obstacles,
-              tileMap: tileMap
+              healthPickups: [],
+              tileMap: tileMap,
+              lastHealthSpawnTime: 0
             };
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
@@ -513,15 +541,23 @@ export default class GameRoom implements Party.Server {
     let activeCount = 0;
     let lastSurvivor = '';
 
-    // Update bombs
+    // Update bombs - move them like grenades
     newBombs = newBombs.filter(bomb => {
       bomb.fuseTimer -= DT;
+
+      // Move bomb (flying like grenade)
+      bomb.pos.x += bomb.vel.x * DT;
+      bomb.pos.y += bomb.vel.y * DT;
+      
+      // Apply friction to slow down
+      bomb.vel.x *= 0.98;
+      bomb.vel.y *= 0.98;
 
       // Add spark particles while fuse is burning
       if (Math.random() > 0.7) {
         newParticles.push(createParticle(
           { x: bomb.pos.x, y: bomb.pos.y - 20 },
-          '#fbbf24',
+          '#f472b6', // Pink spark
           2,
           'spark'
         ));
@@ -589,6 +625,19 @@ export default class GameRoom implements Party.Server {
       }
       return true;
     });
+
+    // Spawn health pickups every 15 seconds (max 4)
+    this.state.lastHealthSpawnTime += DT;
+    if (this.state.lastHealthSpawnTime >= HEALTH_SPAWN_INTERVAL && this.state.healthPickups.length < MAX_HEALTH_PICKUPS) {
+      // Spawn at random position in arena
+      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 2000;
+      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1500;
+      this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
+      this.state.lastHealthSpawnTime = 0;
+    }
+
+    // Update health pickups
+    let newHealthPickups = this.state.healthPickups.filter(hp => hp.active);
 
     playerIds.forEach(pid => {
       const player = this.state.players[pid];
@@ -679,18 +728,25 @@ export default class GameRoom implements Party.Server {
                 target.pos.y += pushDir.y * 40;
               } else if (!target.isDodging && target.hp > 0) {
                 target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
-                newShake += 10;
-                for (let i = 0; i < 10; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 6, 'blood'));
+                newShake += 15;
+                
+                // Big blood splash effect
+                for (let i = 0; i < 20; i++) {
+                  newParticles.push(createParticle(target.pos, '#dc2626', 10, 'blood'));
+                }
+                for (let i = 0; i < 10; i++) {
+                  newParticles.push(createParticle(target.pos, '#ef4444', 8, 'blood'));
+                }
 
-                // Knockback - apply velocity for smooth knockback
+                // Strong knockback - use separate knockbackVel
                 const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                target.vel.x += knockDir.x * SWORD_KNOCKBACK_SPEED;
-                target.vel.y += knockDir.y * SWORD_KNOCKBACK_SPEED;
+                target.knockbackVel.x = knockDir.x * SWORD_KNOCKBACK_SPEED;
+                target.knockbackVel.y = knockDir.y * SWORD_KNOCKBACK_SPEED;
 
                 if (target.hp <= 0) {
                   target.active = false;
-                  newShake += 10;
-                  for (let i = 0; i < 15; i++) newParticles.push(createParticle(target.pos, COLORS.blood, 8, 'blood'));
+                  newShake += 15;
+                  for (let i = 0; i < 25; i++) newParticles.push(createParticle(target.pos, '#dc2626', 12, 'blood'));
                 }
               }
             }
@@ -746,20 +802,19 @@ export default class GameRoom implements Party.Server {
         player.vel = { x: moveDir.x * speed, y: moveDir.y * speed };
       }
 
-      // Apply friction to knockback (smooth deceleration)
-      if (!player.isDodging && !player.isBlocking) {
-        player.vel.x *= KNOCKBACK_FRICTION;
-        player.vel.y *= KNOCKBACK_FRICTION;
-        // Stop very small velocities
-        if (Math.abs(player.vel.x) < 10) player.vel.x = 0;
-        if (Math.abs(player.vel.y) < 10) player.vel.y = 0;
-      }
+      // Apply knockback friction (separate from movement)
+      player.knockbackVel.x *= KNOCKBACK_FRICTION;
+      player.knockbackVel.y *= KNOCKBACK_FRICTION;
+      // Stop very small knockback velocities
+      if (Math.abs(player.knockbackVel.x) < 5) player.knockbackVel.x = 0;
+      if (Math.abs(player.knockbackVel.y) < 5) player.knockbackVel.y = 0;
 
       const oldX = player.pos.x;
       const oldY = player.pos.y;
 
-      player.pos.x += player.vel.x * DT;
-      player.pos.y += player.vel.y * DT;
+      // Apply both movement and knockback
+      player.pos.x += (player.vel.x + player.knockbackVel.x) * DT;
+      player.pos.y += (player.vel.y + player.knockbackVel.y) * DT;
 
       // Wall collision
       if (this.state.tileMap && checkWallCollision(player, this.state.tileMap)) {
@@ -777,6 +832,21 @@ export default class GameRoom implements Party.Server {
       player.pos.x = clamp(player.pos.x, player.radius, CANVAS_WIDTH - player.radius);
       player.pos.y = clamp(player.pos.y, player.radius, CANVAS_HEIGHT - player.radius);
 
+      // Health pickup collision
+      newHealthPickups.forEach(hp => {
+        if (!hp.active) return;
+        const d = dist(player.pos, hp.pos);
+        if (d < player.radius + HEALTH_PICKUP_RADIUS) {
+          // Heal player
+          player.hp = Math.min(player.maxHp || PLAYER_HP, player.hp + hp.healAmount);
+          hp.active = false;
+          // Green healing particles
+          for (let i = 0; i < 15; i++) {
+            newParticles.push(createParticle(player.pos, '#22c55e', 5, 'spark'));
+          }
+        }
+      });
+
       // Water splash particles
       if (this.state.tileMap) {
         const tile = getTileAt(this.state.tileMap, player.pos.x, player.pos.y);
@@ -785,6 +855,9 @@ export default class GameRoom implements Party.Server {
         }
       }
     });
+
+    // Filter collected health pickups
+    newHealthPickups = newHealthPickups.filter(hp => hp.active);
 
     // Update particles
     newParticles.forEach(p => {
@@ -803,6 +876,7 @@ export default class GameRoom implements Party.Server {
 
     this.state.particles = newParticles;
     this.state.bombs = newBombs;
+    this.state.healthPickups = newHealthPickups;
     this.state.shake = newShake;
   }
 

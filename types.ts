@@ -34,6 +34,7 @@ export interface Player extends Entity {
   isDodging: boolean;
   dodgeTimer: number;
   cooldown: number; // Dodge cooldown
+  knockbackVel: Vector2; // Separate knockback velocity
 
   // Combat
   isBlocking: boolean;
@@ -46,6 +47,13 @@ export interface Player extends Entity {
 
   // Stats
   score: number;
+}
+
+export interface HealthPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+  healAmount: number;
 }
 
 export interface Particle extends Entity {
@@ -81,10 +89,12 @@ export interface GameState {
   walls: Wall[];
   bombs: Bomb[];
   obstacles: Obstacle[];
+  healthPickups: HealthPickup[];
   tileMap?: number[][]; // Grid of tile indices
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
+  lastHealthSpawnTime?: number;
 }
 
 export interface GameAssets {

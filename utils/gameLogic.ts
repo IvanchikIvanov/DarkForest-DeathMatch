@@ -196,7 +196,9 @@ export const createInitialState = (): GameState => {
     walls: walls,
     bombs: [],
     obstacles: obstacles,
-    tileMap: tileMap
+    healthPickups: [],
+    tileMap: tileMap,
+    lastHealthSpawnTime: 0
   };
 };
 
@@ -217,6 +219,7 @@ export const createPlayer = (id: string, index: number): Player => ({
   isDodging: false,
   dodgeTimer: 0,
   cooldown: 0,
+  knockbackVel: { x: 0, y: 0 },
   angle: index === 0 ? 0 : Math.PI,
   isBlocking: false,
   isAttacking: false,
