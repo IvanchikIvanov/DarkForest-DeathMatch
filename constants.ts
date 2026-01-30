@@ -1,6 +1,6 @@
 
-export const CANVAS_WIDTH = 2400;
-export const CANVAS_HEIGHT = 1800;
+export const CANVAS_WIDTH = 4800; // Doubled from 2400
+export const CANVAS_HEIGHT = 3600; // Doubled from 1800
 export const TILE_SIZE = 64;
 
 export const FPS = 60;
@@ -32,7 +32,7 @@ export const COLORS = {
 // Gameplay Balance
 export const PLAYER_HP = 100;
 export const SWORD_DAMAGE = 25;
-export const PLAYER_SPEED = 300; // Doubled from 150
+export const PLAYER_SPEED = 500; // Increased for faster movement
 export const PLAYER_BLOCK_SPEED_MOD = 0.4; // Slower when blocking
 export const PLAYER_DODGE_SPEED = 1000; // Doubled from 500
 export const PLAYER_DODGE_DURATION = 0.3;

@@ -205,7 +205,7 @@ export const createPlayer = (id: string, index: number): Player => ({
   playerId: id,
   type: EntityType.PLAYER,
   pos: {
-    x: CANVAS_WIDTH / 2 + (index === 0 ? -200 : 200),
+    x: CANVAS_WIDTH / 2 + (index === 0 ? -600 : 600),
     y: CANVAS_HEIGHT / 2
   },
   vel: { x: 0, y: 0 },

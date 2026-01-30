@@ -92,12 +92,12 @@ interface PlayerInput {
 
 // ============ CONSTANTS ============
 
-const CANVAS_WIDTH = 2400;
-const CANVAS_HEIGHT = 1800;
+const CANVAS_WIDTH = 4800; // Doubled from 2400
+const CANVAS_HEIGHT = 3600; // Doubled from 1800
 const TILE_SIZE = 64;
 const DT = 1 / 60;
 const PLAYER_HP = 100;
-const PLAYER_SPEED = 300; // Doubled from 150
+const PLAYER_SPEED = 500; // Increased for faster movement
 const PLAYER_DODGE_SPEED = 1000; // Doubled from 500
 const PLAYER_DODGE_DURATION = 0.3;
 const PLAYER_DODGE_COOLDOWN = 1.0;
@@ -295,7 +295,7 @@ const createPlayer = (id: string, index: number): Player => ({
   playerId: id,
   type: EntityType.PLAYER,
   pos: {
-    x: CANVAS_WIDTH / 2 + (index === 0 ? -200 : 200),
+    x: CANVAS_WIDTH / 2 + (index === 0 ? -600 : 600),
     y: CANVAS_HEIGHT / 2
   },
   vel: { x: 0, y: 0 },
