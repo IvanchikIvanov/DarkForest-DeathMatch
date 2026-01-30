@@ -593,7 +593,17 @@ const GameCanvas: React.FC = () => {
 
       const particleType = (pt as any).particleType;
 
-      if (particleType === 'explosion') {
+      if (particleType === 'blood') {
+        // BLOOD - big bright red circles with glow
+        ctx.save();
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.pos.x, pt.pos.y, pt.radius * 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (particleType === 'explosion') {
         // Explosion particles - larger and brighter
         const explosionSize = pt.radius * 3;
         const gradient = ctx.createRadialGradient(pt.pos.x, pt.pos.y, 0, pt.pos.x, pt.pos.y, explosionSize);

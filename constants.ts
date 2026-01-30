@@ -44,9 +44,9 @@ export const SWORD_ARC = Math.PI * 2; // Very wide swing (full circle)
 export const SWORD_COOLDOWN = 0.6;
 export const SWORD_ATTACK_DURATION = 0.2; // Visual swing time
 export const SHIELD_BLOCK_ANGLE = Math.PI / 1.2; // Frontal protection arc
-export const SWORD_KNOCKBACK = 250; // Knockback distance when hit by sword
-export const SWORD_KNOCKBACK_SPEED = 600; // Knockback velocity speed
-export const KNOCKBACK_FRICTION = 0.85; // Friction for smooth knockback decay
+export const SWORD_KNOCKBACK = 400; // Knockback distance when hit by sword
+export const SWORD_KNOCKBACK_SPEED = 1800; // Knockback velocity speed - very strong
+export const KNOCKBACK_FRICTION = 0.92; // Friction for smooth knockback decay (higher = longer)
 
 // Bomb System
 export const BOMB_DAMAGE = 25;

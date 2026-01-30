@@ -118,9 +118,9 @@ const SWORD_ATTACK_DURATION = 0.2;
 const SHIELD_BLOCK_ANGLE = Math.PI / 1.2;
 const SWORD_ARC = Math.PI * 2;
 const SWORD_DAMAGE = 25;
-const SWORD_KNOCKBACK = 250; // Knockback distance when hit by sword
-const SWORD_KNOCKBACK_SPEED = 600; // Knockback velocity speed
-const KNOCKBACK_FRICTION = 0.85; // Friction for smooth knockback decay
+const SWORD_KNOCKBACK = 400; // Knockback distance when hit by sword
+const SWORD_KNOCKBACK_SPEED = 1800; // Knockback velocity speed - very strong
+const KNOCKBACK_FRICTION = 0.92; // Friction for smooth knockback decay (higher = longer)
 
 // Bomb constants
 const BOMB_DAMAGE = 25;
@@ -335,16 +335,18 @@ const createPlayer = (id: string, index: number): Player => ({
 
 const createParticle = (pos: Vector2, color: string, speedMod: number, particleType?: 'blood' | 'spark' | 'explosion' | 'trail' | 'water'): Particle => {
   const angle = Math.random() * Math.PI * 2;
-  const speed = Math.random() * 50 * speedMod;
+  const speed = Math.random() * 80 * speedMod; // Increased base speed
+  // Blood particles are bigger
+  const radius = particleType === 'blood' ? (Math.random() * 6 + 3) : (Math.random() * 3 + 1);
   return {
     id: `p-${Math.random()}`,
     type: EntityType.PARTICLE,
     pos: { ...pos },
     vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-    radius: Math.random() * 3 + 1,
+    radius: radius,
     color: color,
     active: true,
-    life: 1.0,
+    life: particleType === 'blood' ? 1.5 : 1.0, // Blood lasts longer
     decay: Math.random() * 3 + 2,
     particleType
   };
@@ -728,17 +730,20 @@ export default class GameRoom implements Party.Server {
                 target.pos.y += pushDir.y * 40;
               } else if (!target.isDodging && target.hp > 0) {
                 target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
-                newShake += 15;
+                newShake += 20;
                 
-                // Big blood splash effect
-                for (let i = 0; i < 20; i++) {
-                  newParticles.push(createParticle(target.pos, '#dc2626', 10, 'blood'));
+                // MASSIVE blood splash effect - many particles flying in all directions
+                for (let i = 0; i < 35; i++) {
+                  newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood')); // Dark red
                 }
-                for (let i = 0; i < 10; i++) {
-                  newParticles.push(createParticle(target.pos, '#ef4444', 8, 'blood'));
+                for (let i = 0; i < 25; i++) {
+                  newParticles.push(createParticle(target.pos, '#ef4444', 12, 'blood')); // Bright red
+                }
+                for (let i = 0; i < 15; i++) {
+                  newParticles.push(createParticle(target.pos, '#b91c1c', 10, 'blood')); // Even darker red
                 }
 
-                // Strong knockback - use separate knockbackVel
+                // STRONG knockback - use separate knockbackVel that overrides movement
                 const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
                 target.knockbackVel.x = knockDir.x * SWORD_KNOCKBACK_SPEED;
                 target.knockbackVel.y = knockDir.y * SWORD_KNOCKBACK_SPEED;
