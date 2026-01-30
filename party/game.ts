@@ -239,18 +239,18 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           }
         }
 
-        // Add bush tile patches - 10% chance
-        if (rand > 0.82 && rand <= 0.92 && d < arenaRadius - 2) {
+        // Add bush tile patches - 4% chance (reduced from 10%)
+        if (rand > 0.90 && rand <= 0.94 && d < arenaRadius - 2) {
           tileMap[y][x] = TILE_BUSH;
         }
 
-        // Add stone tile obstacles (non-walkable) - scattered
-        if (rand > 0.97 && d < arenaRadius - 4 && d > 3) {
+        // Add stone tile obstacles (non-walkable) - 1% chance (reduced from 3%)
+        if (rand > 0.99 && d < arenaRadius - 4 && d > 3) {
           tileMap[y][x] = TILE_STONE;
         }
 
-        // Add tree obstacles - 3% chance
-        if (rand2 > 0.97 && d < arenaRadius - 4 && d > 3) {
+        // Add tree obstacles - 1% chance (reduced from 3%)
+        if (rand2 > 0.99 && d < arenaRadius - 4 && d > 3) {
           obstacles.push({
             id: `tree-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
@@ -261,8 +261,8 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           });
         }
 
-        // Add rock obstacles - 2% chance
-        if (rand2 > 0.95 && rand2 <= 0.97 && d < arenaRadius - 4 && d > 3) {
+        // Add rock obstacles - 0.5% chance (reduced from 2%)
+        if (rand2 > 0.995 && rand2 <= 0.997 && d < arenaRadius - 4 && d > 3) {
           obstacles.push({
             id: `rock-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
@@ -273,8 +273,8 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
           });
         }
 
-        // Add bush obstacles - 2% chance
-        if (rand2 > 0.93 && rand2 <= 0.95 && d < arenaRadius - 3 && d > 2) {
+        // Add bush obstacles - 0.5% chance (reduced from 2%)
+        if (rand2 > 0.993 && rand2 <= 0.995 && d < arenaRadius - 3 && d > 2) {
           obstacles.push({
             id: `bush-${x}-${y}`,
             pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
