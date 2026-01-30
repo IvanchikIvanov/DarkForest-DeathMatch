@@ -398,40 +398,46 @@ const GameCanvas: React.FC = () => {
       });
     }
 
-    // Draw Health Pickups - BIG AND VISIBLE
-    if ((state as any).healthPickups) {
-      (state as any).healthPickups.forEach((hp: any) => {
-        if (!hp.active) return;
-        ctx.save();
-        ctx.translate(hp.pos.x, hp.pos.y);
-        
-        // Strong pulsing glow effect
-        const pulse = 1 + Math.sin(timeRef.current * 4) * 0.25;
-        ctx.scale(pulse, pulse);
-        
-        // Outer glow circle
-        ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur = 40;
-        ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
-        ctx.beginPath();
-        ctx.arc(0, 0, 50, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Green cross (health symbol) - BIGGER
-        ctx.fillStyle = '#22c55e';
-        ctx.fillRect(-30, -8, 60, 16); // Horizontal
-        ctx.fillRect(-8, -30, 16, 60); // Vertical
-        
-        // White outline
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(-30, -8, 60, 16);
-        ctx.strokeRect(-8, -30, 16, 60);
-        
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      });
-    }
+    // Draw Health Pickups - HUGE AND SUPER VISIBLE
+    const healthPickups = (state as any).healthPickups || [];
+    healthPickups.forEach((hp: any) => {
+      if (!hp || !hp.active) return;
+      
+      ctx.save();
+      ctx.translate(hp.pos.x, hp.pos.y);
+      
+      // Strong pulsing glow effect
+      const pulse = 1 + Math.sin(timeRef.current * 4) * 0.3;
+      ctx.scale(pulse, pulse);
+      
+      // HUGE outer glow circle - bright green
+      ctx.shadowColor = '#00ff00';
+      ctx.shadowBlur = 60;
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 80, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Inner bright circle
+      ctx.fillStyle = '#00ff00';
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Green cross (health symbol) - HUGE
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-50, -12, 100, 24); // Horizontal
+      ctx.fillRect(-12, -50, 24, 100); // Vertical
+      
+      // Red outline for visibility
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(-50, -12, 100, 24);
+      ctx.strokeRect(-12, -50, 24, 100);
+      
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
 
     // Draw Gun Pickups - Golden pistol icon
     if ((state as any).gunPickups) {
