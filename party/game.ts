@@ -676,11 +676,20 @@ export default class GameRoom implements Party.Server {
     });
 
     // Spawn health pickups every 15 seconds (max 4)
+    // Spawn one immediately if none exist
+    if (this.state.healthPickups.length === 0) {
+      // Spawn in center of arena for visibility
+      const spawnX = CANVAS_WIDTH / 2;
+      const spawnY = CANVAS_HEIGHT / 2;
+      this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
+      this.state.lastHealthSpawnTime = 0;
+    }
+    
     this.state.lastHealthSpawnTime += DT;
     if (this.state.lastHealthSpawnTime >= HEALTH_SPAWN_INTERVAL && this.state.healthPickups.length < MAX_HEALTH_PICKUPS) {
-      // Spawn at random position in arena
-      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 2000;
-      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1500;
+      // Spawn at random position in arena (closer to center)
+      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1000;
+      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 800;
       this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
       this.state.lastHealthSpawnTime = 0;
     }
