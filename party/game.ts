@@ -824,77 +824,77 @@ export default class GameRoom implements Party.Server {
         } else {
           // Normal sword attack
           player.isAttacking = true;
-        player.attackTimer = SWORD_ATTACK_DURATION;
-        player.attackCooldown = SWORD_COOLDOWN;
+          player.attackTimer = SWORD_ATTACK_DURATION;
+          player.attackCooldown = SWORD_COOLDOWN;
 
-        // Sword trail particles
-        for (let i = 0; i < 3; i++) {
-          const trailAngle = (player.angle || 0) + (Math.random() - 0.5) * 0.5;
-          const trailDist = 40 + Math.random() * 20;
-          newParticles.push(createParticle(
-            { x: player.pos.x + Math.cos(trailAngle) * trailDist, y: player.pos.y + Math.sin(trailAngle) * trailDist },
-            '#ffffff',
-            2,
-            'trail'
-          ));
-        }
+          // Sword trail particles
+          for (let i = 0; i < 3; i++) {
+            const trailAngle = (player.angle || 0) + (Math.random() - 0.5) * 0.5;
+            const trailDist = 40 + Math.random() * 20;
+            newParticles.push(createParticle(
+              { x: player.pos.x + Math.cos(trailAngle) * trailDist, y: player.pos.y + Math.sin(trailAngle) * trailDist },
+              '#ffffff',
+              2,
+              'trail'
+            ));
+          }
 
-        playerIds.forEach(targetId => {
-          if (targetId === pid) return;
-          const target = this.state.players[targetId];
-          if (!target.active) return;
+          playerIds.forEach(targetId => {
+            if (targetId === pid) return;
+            const target = this.state.players[targetId];
+            if (!target.active) return;
 
-          const d = dist(player.pos, target.pos);
-          if (d < SWORD_RANGE) {
-            const angleToTarget = Math.atan2(target.pos.y - player.pos.y, target.pos.x - player.pos.x);
-            const aDiff = angleDiff(player.angle || 0, angleToTarget);
+            const d = dist(player.pos, target.pos);
+            if (d < SWORD_RANGE) {
+              const angleToTarget = Math.atan2(target.pos.y - player.pos.y, target.pos.x - player.pos.x);
+              const aDiff = angleDiff(player.angle || 0, angleToTarget);
 
-            if (aDiff < SWORD_ARC / 2) {
-              let blocked = false;
-              if (target.isBlocking) {
-                const angleToAttacker = Math.atan2(player.pos.y - target.pos.y, player.pos.x - target.pos.x);
-                const blockDiff = angleDiff(target.angle || 0, angleToAttacker);
-                if (blockDiff < SHIELD_BLOCK_ANGLE / 2) {
-                  blocked = true;
-                }
-              }
-
-              if (blocked) {
-                newShake += 5;
-                for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4, 'spark'));
-                const pushDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                target.pos.x += pushDir.x * 40;
-                target.pos.y += pushDir.y * 40;
-              } else if (!target.isDodging && target.hp > 0) {
-                target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
-                newShake += 20;
-                
-                // MASSIVE blood splash effect - many particles flying in all directions
-                for (let i = 0; i < 35; i++) {
-                  newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood')); // Dark red
-                }
-                for (let i = 0; i < 25; i++) {
-                  newParticles.push(createParticle(target.pos, '#ef4444', 12, 'blood')); // Bright red
-                }
-                for (let i = 0; i < 15; i++) {
-                  newParticles.push(createParticle(target.pos, '#b91c1c', 10, 'blood')); // Even darker red
+              if (aDiff < SWORD_ARC / 2) {
+                let blocked = false;
+                if (target.isBlocking) {
+                  const angleToAttacker = Math.atan2(player.pos.y - target.pos.y, player.pos.x - target.pos.x);
+                  const blockDiff = angleDiff(target.angle || 0, angleToAttacker);
+                  if (blockDiff < SHIELD_BLOCK_ANGLE / 2) {
+                    blocked = true;
+                  }
                 }
 
-                // STRONG knockback - use separate knockbackVel that overrides movement
-                const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                target.knockbackVel.x = knockDir.x * SWORD_KNOCKBACK_SPEED;
-                target.knockbackVel.y = knockDir.y * SWORD_KNOCKBACK_SPEED;
+                if (blocked) {
+                  newShake += 5;
+                  for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4, 'spark'));
+                  const pushDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
+                  target.pos.x += pushDir.x * 40;
+                  target.pos.y += pushDir.y * 40;
+                } else if (!target.isDodging && target.hp > 0) {
+                  target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
+                  newShake += 20;
+                  
+                  // MASSIVE blood splash effect - many particles flying in all directions
+                  for (let i = 0; i < 35; i++) {
+                    newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood')); // Dark red
+                  }
+                  for (let i = 0; i < 25; i++) {
+                    newParticles.push(createParticle(target.pos, '#ef4444', 12, 'blood')); // Bright red
+                  }
+                  for (let i = 0; i < 15; i++) {
+                    newParticles.push(createParticle(target.pos, '#b91c1c', 10, 'blood')); // Even darker red
+                  }
 
-                if (target.hp <= 0) {
-                  target.active = false;
-                  newShake += 15;
-                  for (let i = 0; i < 25; i++) newParticles.push(createParticle(target.pos, '#dc2626', 12, 'blood'));
+                  // STRONG knockback - use separate knockbackVel that overrides movement
+                  const knockDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
+                  target.knockbackVel.x = knockDir.x * SWORD_KNOCKBACK_SPEED;
+                  target.knockbackVel.y = knockDir.y * SWORD_KNOCKBACK_SPEED;
+
+                  if (target.hp <= 0) {
+                    target.active = false;
+                    newShake += 15;
+                    for (let i = 0; i < 25; i++) newParticles.push(createParticle(target.pos, '#dc2626', 12, 'blood'));
+                  }
                 }
               }
             }
-          }
-        });
-        } // End of sword attack else block
+          });
+        }
       }
 
       if (player.attackTimer <= 0) player.isAttacking = false;
