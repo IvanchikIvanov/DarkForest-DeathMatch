@@ -274,9 +274,17 @@ const GameCanvas: React.FC = () => {
   // --- Drawing ---
   const draw = (ctx: CanvasRenderingContext2D, state: GameState) => {
     const assets = assetsRef.current;
+    const canvasWidth = canvasRef.current?.width || 800;
+    const canvasHeight = canvasRef.current?.height || 600;
+    
     if (!assets) {
+      // Clear canvas and show loading state
       ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, 800, 600);
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Loading assets...', canvasWidth / 2, canvasHeight / 2);
       return;
     }
 
