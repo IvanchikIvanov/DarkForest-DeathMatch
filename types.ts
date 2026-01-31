@@ -56,6 +56,20 @@ export interface HealthPickup {
   healAmount: number;
 }
 
+export interface GunPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+export interface Bullet {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  ownerId: string;
+  active: boolean;
+}
+
 export interface Particle extends Entity {
   life: number; // 0 to 1
   decay: number;
@@ -90,11 +104,14 @@ export interface GameState {
   bombs: Bomb[];
   obstacles: Obstacle[];
   healthPickups: HealthPickup[];
+  gunPickups: GunPickup[];
+  bullets: Bullet[];
   tileMap?: number[][]; // Grid of tile indices
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
   lastHealthSpawnTime?: number;
+  lastGunSpawnTime?: number;
 }
 
 export interface GameAssets {

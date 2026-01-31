@@ -197,8 +197,11 @@ export const createInitialState = (): GameState => {
     bombs: [],
     obstacles: obstacles,
     healthPickups: [],
+    gunPickups: [],
+    bullets: [],
     tileMap: tileMap,
-    lastHealthSpawnTime: 0
+    lastHealthSpawnTime: 0,
+    lastGunSpawnTime: 0
   };
 };
 

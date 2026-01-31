@@ -400,6 +400,10 @@ const GameCanvas: React.FC = () => {
 
     // Draw Health Pickups - HUGE AND SUPER VISIBLE
     const healthPickups = (state as any).healthPickups || [];
+    // DEBUG: Log health pickups
+    if (healthPickups.length > 0 && Math.random() < 0.01) {
+      console.log('[RENDER] Health pickups:', healthPickups.length, healthPickups.map((hp: any) => ({ pos: hp.pos, active: hp.active })));
+    }
     healthPickups.forEach((hp: any) => {
       if (!hp || !hp.active) return;
       
@@ -440,43 +444,46 @@ const GameCanvas: React.FC = () => {
     });
 
     // Draw Gun Pickups - Golden pistol icon
-    if ((state as any).gunPickups) {
-      (state as any).gunPickups.forEach((gp: any) => {
-        if (!gp.active) return;
-        ctx.save();
-        ctx.translate(gp.pos.x, gp.pos.y);
-        
-        // Pulsing effect
-        const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
-        ctx.scale(pulse, pulse);
-        
-        // Outer glow
-        ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 35;
-        ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
-        ctx.beginPath();
-        ctx.arc(0, 0, 45, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Gun shape (pistol)
-        ctx.fillStyle = '#fbbf24';
-        // Barrel
-        ctx.fillRect(-25, -8, 40, 12);
-        // Handle
-        ctx.fillRect(-5, -8, 15, 30);
-        // Trigger guard
-        ctx.fillRect(5, 8, 10, 8);
-        
-        // Outline
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(-25, -8, 40, 12);
-        ctx.strokeRect(-5, -8, 15, 30);
-        
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      });
+    const gunPickups = (state as any).gunPickups || [];
+    // DEBUG: Log gun pickups
+    if (gunPickups.length > 0 && Math.random() < 0.01) {
+      console.log('[RENDER] Gun pickups:', gunPickups.length, gunPickups.map((gp: any) => ({ pos: gp.pos, active: gp.active })));
     }
+    gunPickups.forEach((gp: any) => {
+      if (!gp.active) return;
+      ctx.save();
+      ctx.translate(gp.pos.x, gp.pos.y);
+
+      // Pulsing effect
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      ctx.scale(pulse, pulse);
+
+      // Outer glow
+      ctx.shadowColor = '#fbbf24';
+      ctx.shadowBlur = 35;
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 45, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gun shape (pistol)
+      ctx.fillStyle = '#fbbf24';
+      // Barrel
+      ctx.fillRect(-25, -8, 40, 12);
+      // Handle
+      ctx.fillRect(-5, -8, 15, 30);
+      // Trigger guard
+      ctx.fillRect(5, 8, 10, 8);
+
+      // Outline
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-25, -8, 40, 12);
+      ctx.strokeRect(-5, -8, 15, 30);
+
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
 
     // Draw Bullets - Yellow streaks
     if ((state as any).bullets) {
