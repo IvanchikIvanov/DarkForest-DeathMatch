@@ -290,9 +290,6 @@ const GameCanvas: React.FC = () => {
 
     timeRef.current += 0.016;
 
-    const canvasWidth = canvasRef.current?.width || 800;
-    const canvasHeight = canvasRef.current?.height || 600;
-
     const scaleX = canvasWidth / CANVAS_WIDTH;
     const scaleY = canvasHeight / CANVAS_HEIGHT;
     const scale = Math.min(scaleX, scaleY);
@@ -491,31 +488,97 @@ const GameCanvas: React.FC = () => {
         if (!bullet.active) return;
         ctx.save();
         ctx.translate(bullet.pos.x, bullet.pos.y);
-        
+
         // Calculate angle from velocity
         const angle = Math.atan2(bullet.vel.y, bullet.vel.x);
         ctx.rotate(angle);
-        
+
         // Glow
         ctx.shadowColor = '#fbbf24';
         ctx.shadowBlur = 15;
-        
+
         // Bullet trail
         ctx.fillStyle = '#fbbf24';
         ctx.beginPath();
         ctx.ellipse(0, 0, 20, 6, 0, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Bright core
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.ellipse(5, 0, 8, 3, 0, 0, Math.PI * 2);
         ctx.fill();
-        
+
         ctx.shadowBlur = 0;
         ctx.restore();
       });
     }
+
+    // Draw Sword Pickups - Silver/white sword icon
+    const swordPickups = (state as any).swordPickups || [];
+    swordPickups.forEach((sp: any) => {
+      if (!sp.active) return;
+      ctx.save();
+      ctx.translate(sp.pos.x, sp.pos.y);
+
+      // Pulsing effect
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      ctx.scale(pulse, pulse);
+
+      // Outer glow
+      ctx.shadowColor = '#e5e7eb';
+      ctx.shadowBlur = 35;
+      ctx.fillStyle = 'rgba(229, 231, 235, 0.3)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw sword sprite if available
+      if (assets.sword) {
+        ctx.rotate(Math.PI / 4); // Angle it
+        ctx.drawImage(assets.sword, -40, -40, 80, 80);
+      } else {
+        // Fallback sword shape
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(-5, -35, 10, 70); // Blade
+        ctx.fillRect(-15, 25, 30, 8); // Guard
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillRect(-4, 30, 8, 15); // Handle
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
+
+    // Draw Thrown Swords - Flying spinning swords
+    const thrownSwords = (state as any).thrownSwords || [];
+    thrownSwords.forEach((sword: any) => {
+      if (!sword.active) return;
+      ctx.save();
+      ctx.translate(sword.pos.x, sword.pos.y);
+
+      // Calculate angle from velocity and add spin effect
+      const angle = Math.atan2(sword.vel.y, sword.vel.x);
+      const spin = timeRef.current * 15; // Fast spin
+      ctx.rotate(angle + spin);
+
+      // Glow effect
+      ctx.shadowColor = '#e5e7eb';
+      ctx.shadowBlur = 20;
+
+      // Draw sword sprite if available
+      if (assets.sword) {
+        ctx.drawImage(assets.sword, -35, -35, 70, 70);
+      } else {
+        // Fallback sword shape
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(-4, -30, 8, 60); // Blade
+        ctx.fillRect(-12, 20, 24, 6); // Guard
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
 
     // Draw Players
     Object.values(state.players).forEach(p => {
@@ -548,37 +611,17 @@ const GameCanvas: React.FC = () => {
       const playerSprite = isMe ? assets.player : assets.playerEnemy;
       ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
 
-      // Shield - 3x bigger
-      if (p.isBlocking) {
-        ctx.save();
-        ctx.translate(20, 20);
-        ctx.rotate(Math.PI / 4);
-        // Shield 3x larger when blocking (was 48, now 144)
-        ctx.drawImage(assets.shield, -72, -72, 144, 144);
-        ctx.restore();
+      // Shield removed - no more blocking
 
-        // Shield arc effect - much more visible
-        ctx.beginPath();
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 10;
-        ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 30;
-        ctx.arc(0, 0, p.radius + 60, -Math.PI / 2.5, Math.PI / 2.5);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      } else {
-        // Shield 3x larger when not blocking (was 28, now 84)
-        ctx.drawImage(assets.shield, -42, 15, 84, 84);
-      }
-
-      // Weapon - Sword or Gun
+      // Weapon - Sword or Gun (mutually exclusive)
       const hasGun = (p as any).hasGun;
-      
+      const hasSword = (p as any).hasSword;
+
       if (hasGun) {
-        // Draw gun instead of sword
+        // Draw gun
         ctx.save();
         ctx.translate(25, 0);
-        
+
         // Gun shape
         ctx.fillStyle = '#fbbf24';
         ctx.shadowColor = '#fbbf24';
@@ -587,46 +630,46 @@ const GameCanvas: React.FC = () => {
         ctx.fillRect(0, -5, 35, 10);
         // Handle
         ctx.fillRect(-5, -5, 12, 25);
-        
+
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.strokeRect(0, -5, 35, 10);
         ctx.strokeRect(-5, -5, 12, 25);
-        
+
         ctx.shadowBlur = 0;
         ctx.restore();
-      } else {
+      } else if (hasSword) {
         // Draw sword
         ctx.save();
         ctx.translate(15, -10);
 
         if (p.isAttacking) {
-        const progress = 1 - (p.attackTimer / 0.2);
-        const swingAngle = -Math.PI / 2 + (progress * Math.PI);
-        ctx.rotate(swingAngle);
+          const progress = 1 - (p.attackTimer / 0.2);
+          const swingAngle = -Math.PI / 2 + (progress * Math.PI);
+          ctx.rotate(swingAngle);
 
-        // Sword trail effect
-        ctx.globalAlpha = 0.4;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+          // Sword trail effect
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 8;
+          ctx.beginPath();
+          ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
 
-        ctx.drawImage(assets.sword, 0, -52, 104, 104);
+          ctx.drawImage(assets.sword, 0, -52, 104, 104);
 
-        ctx.restore();
+          ctx.restore();
 
-        // Additional swing arc
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 4;
-        ctx.shadowColor = '#fff';
-        ctx.shadowBlur = 8;
-        ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+          // Additional swing arc
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.lineWidth = 4;
+          ctx.shadowColor = '#fff';
+          ctx.shadowBlur = 8;
+          ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
         } else {
           ctx.rotate(Math.PI / 4);
           ctx.drawImage(assets.sword, 0, -52, 104, 104);
@@ -634,7 +677,8 @@ const GameCanvas: React.FC = () => {
         }
 
         ctx.restore();
-      } // End of sword drawing (hasGun else block)
+      }
+      // If neither hasGun nor hasSword, player is unarmed (no weapon drawn)
 
       // UI: Player name/ID
       ctx.fillStyle = '#fff';
@@ -877,8 +921,8 @@ const GameCanvas: React.FC = () => {
       {/* CONTROLS HUD */}
       <div className="absolute top-16 right-4 text-xs text-white/50 font-[monospace] flex flex-col gap-1 items-end pointer-events-none">
         <div className="flex items-center gap-2">MOVE <kbd className="bg-zinc-800 p-1 rounded">WASD</kbd></div>
-        <div className="flex items-center gap-2">ATTACK <kbd className="bg-zinc-800 p-1 rounded">L-CLICK</kbd></div>
-        <div className="flex items-center gap-2">BLOCK <kbd className="bg-zinc-800 p-1 rounded">R-CLICK</kbd></div>
+        <div className="flex items-center gap-2">ATTACK/SHOOT <kbd className="bg-zinc-800 p-1 rounded">L-CLICK</kbd></div>
+        <div className="flex items-center gap-2 text-gray-300">THROW SWORD <kbd className="bg-zinc-800 p-1 rounded text-gray-300">R-CLICK</kbd></div>
         <div className="flex items-center gap-2">DODGE <kbd className="bg-zinc-800 p-1 rounded">SPACE</kbd></div>
         <div className="flex items-center gap-2 text-pink-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-pink-400">E</kbd></div>
       </div>

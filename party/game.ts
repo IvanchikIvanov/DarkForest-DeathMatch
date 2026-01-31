@@ -42,6 +42,7 @@ interface Player extends Entity {
   attackCooldown: number;
   bombCooldown: number;
   hasGun: boolean; // Has picked up gun
+  hasSword: boolean; // Has picked up sword
   score: number;
 }
 
@@ -85,6 +86,20 @@ interface GunPickup {
   active: boolean;
 }
 
+interface SwordPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+interface ThrownSword {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  ownerId: string;
+  active: boolean;
+}
+
 interface Bullet {
   id: string;
   pos: Vector2;
@@ -101,13 +116,16 @@ interface GameState {
   obstacles: Obstacle[];
   healthPickups: HealthPickup[];
   gunPickups: GunPickup[];
+  swordPickups: SwordPickup[];
   bullets: Bullet[];
+  thrownSwords: ThrownSword[];
   tileMap?: number[][];
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
   lastHealthSpawnTime: number;
   lastGunSpawnTime: number;
+  lastSwordSpawnTime: number;
 }
 
 interface PlayerInput {
@@ -156,11 +174,19 @@ const HEALTH_PICKUP_RADIUS = 25; // Increased for visibility
 
 // Gun pickup constants
 const GUN_SPAWN_INTERVAL = 20; // Seconds between gun spawns
-const MAX_GUN_PICKUPS = 1; // Only 1 gun at a time
+const MAX_GUN_PICKUPS = 2; // Allow up to 2 guns at a time
 const GUN_PICKUP_RADIUS = 25;
 const BULLET_SPEED = 1200;
 const BULLET_DAMAGE = 40;
 const BULLET_RADIUS = 8;
+
+// Sword pickup constants
+const SWORD_SPAWN_INTERVAL = 15; // Seconds between sword spawns
+const MAX_SWORD_PICKUPS = 2; // Allow up to 2 swords at a time
+const SWORD_PICKUP_RADIUS = 25;
+const THROWN_SWORD_SPEED = 900;
+const THROWN_SWORD_DAMAGE = 35;
+const THROWN_SWORD_RADIUS = 15;
 
 // Terrain constants
 const WATER_SPEED_MOD = 0.5;
@@ -357,12 +383,27 @@ const createPlayer = (id: string, index: number): Player => ({
   attackCooldown: 0,
   bombCooldown: 0,
   hasGun: false,
+  hasSword: true, // Start with sword
   score: 0
 });
 
 const createGunPickup = (x: number, y: number): GunPickup => ({
   id: `gun-${Math.random()}`,
   pos: { x, y },
+  active: true
+});
+
+const createSwordPickup = (x: number, y: number): SwordPickup => ({
+  id: `sword-${Math.random()}`,
+  pos: { x, y },
+  active: true
+});
+
+const createThrownSword = (pos: Vector2, angle: number, ownerId: string): ThrownSword => ({
+  id: `thrown-sword-${Math.random()}`,
+  pos: { x: pos.x, y: pos.y },
+  vel: { x: Math.cos(angle) * THROWN_SWORD_SPEED, y: Math.sin(angle) * THROWN_SWORD_SPEED },
+  ownerId,
   active: true
 });
 
@@ -482,10 +523,13 @@ export default class GameRoom implements Party.Server {
       obstacles: obstacles,
       healthPickups: [],
       gunPickups: [],
+      swordPickups: [],
       bullets: [],
+      thrownSwords: [],
       tileMap: tileMap,
       lastHealthSpawnTime: 0,
-      lastGunSpawnTime: 0
+      lastGunSpawnTime: 0,
+      lastSwordSpawnTime: 0
     };
   }
 
@@ -533,10 +577,13 @@ export default class GameRoom implements Party.Server {
               obstacles: obstacles,
               healthPickups: [],
               gunPickups: [],
+              swordPickups: [],
               bullets: [],
+              thrownSwords: [],
               tileMap: tileMap,
               lastHealthSpawnTime: 0,
-              lastGunSpawnTime: 0
+              lastGunSpawnTime: 0,
+              lastSwordSpawnTime: 0
             };
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
@@ -694,13 +741,22 @@ export default class GameRoom implements Party.Server {
       this.state.lastHealthSpawnTime = 0;
     }
 
-    // Spawn gun pickup every 20 seconds (max 1)
+    // Spawn gun pickup every 20 seconds (max 2)
     this.state.lastGunSpawnTime += DT;
     if (this.state.lastGunSpawnTime >= GUN_SPAWN_INTERVAL && this.state.gunPickups.length < MAX_GUN_PICKUPS) {
       const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
       const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
       this.state.gunPickups.push(createGunPickup(spawnX, spawnY));
       this.state.lastGunSpawnTime = 0;
+    }
+
+    // Spawn sword pickup every 15 seconds (max 2)
+    this.state.lastSwordSpawnTime += DT;
+    if (this.state.lastSwordSpawnTime >= SWORD_SPAWN_INTERVAL && this.state.swordPickups.length < MAX_SWORD_PICKUPS) {
+      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
+      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
+      this.state.swordPickups.push(createSwordPickup(spawnX, spawnY));
+      this.state.lastSwordSpawnTime = 0;
     }
 
     // Update bullets
@@ -755,7 +811,63 @@ export default class GameRoom implements Party.Server {
       if (Math.random() > 0.5) {
         newParticles.push(createParticle(bullet.pos, '#fbbf24', 2, 'trail'));
       }
-      
+
+      return true;
+    });
+
+    // Update thrown swords
+    let newThrownSwords = this.state.thrownSwords.filter(sword => {
+      if (!sword.active) return false;
+
+      // Move sword
+      sword.pos.x += sword.vel.x * DT;
+      sword.pos.y += sword.vel.y * DT;
+
+      // Check if out of bounds
+      if (sword.pos.x < 0 || sword.pos.x > CANVAS_WIDTH || sword.pos.y < 0 || sword.pos.y > CANVAS_HEIGHT) {
+        return false;
+      }
+
+      // Check collision with players
+      for (const pid of playerIds) {
+        if (pid === sword.ownerId) continue; // Don't hit self
+        const target = this.state.players[pid];
+        if (!target.active) continue;
+
+        const d = dist(sword.pos, target.pos);
+        if (d < target.radius + THROWN_SWORD_RADIUS) {
+          // HIT!
+          if (!target.isDodging && target.hp > 0) {
+            target.hp = Math.max(0, target.hp - THROWN_SWORD_DAMAGE);
+            newShake += 18;
+
+            // Blood splash
+            for (let i = 0; i < 30; i++) {
+              newParticles.push(createParticle(target.pos, '#dc2626', 14, 'blood'));
+            }
+
+            // Knockback from thrown sword
+            const knockDir = normalize(sword.vel);
+            target.knockbackVel.x = knockDir.x * 1200;
+            target.knockbackVel.y = knockDir.y * 1200;
+
+            if (target.hp <= 0) {
+              target.active = false;
+              newShake += 15;
+              for (let i = 0; i < 35; i++) {
+                newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood'));
+              }
+            }
+          }
+          return false; // Remove sword
+        }
+      }
+
+      // Sword trail particles (white/silver)
+      if (Math.random() > 0.4) {
+        newParticles.push(createParticle(sword.pos, '#e5e7eb', 3, 'trail'));
+      }
+
       return true;
     });
 
@@ -764,6 +876,9 @@ export default class GameRoom implements Party.Server {
     
     // Update gun pickups
     let newGunPickups = this.state.gunPickups.filter(gp => gp.active);
+
+    // Update sword pickups
+    let newSwordPickups = this.state.swordPickups.filter(sp => sp.active);
 
     playerIds.forEach(pid => {
       const player = this.state.players[pid];
@@ -785,8 +900,20 @@ export default class GameRoom implements Party.Server {
       const dy = input.mouse.y - player.pos.y;
       player.angle = Math.atan2(dy, dx);
 
-      // Blocking
-      player.isBlocking = input.mouseRightDown && !player.isAttacking && !player.isDodging;
+      // Sword throwing (right-click) - throw sword if player has one
+      player.isBlocking = false; // Shield removed - no more blocking
+      if (input.mouseRightDown && player.hasSword && player.attackCooldown <= 0 && !player.isDodging && !player.isAttacking) {
+        // Throw the sword
+        const thrownSword = createThrownSword(player.pos, player.angle || 0, pid);
+        newThrownSwords.push(thrownSword);
+        player.hasSword = false; // Player loses sword after throwing
+        player.attackCooldown = 0.3; // Short cooldown
+        newShake += 3;
+        // Throw particles
+        for (let i = 0; i < 6; i++) {
+          newParticles.push(createParticle(player.pos, '#e5e7eb', 4, 'spark'));
+        }
+      }
 
       // Bomb throwing (E key) - throw in direction of cursor
       if (input.throwBomb && player.bombCooldown <= 0 && !player.isDodging) {
@@ -808,8 +935,8 @@ export default class GameRoom implements Party.Server {
         }
       }
 
-      // Attack - if has gun, shoot instead of sword
-      if (input.mouseDown && player.attackCooldown <= 0 && !player.isDodging && !player.isBlocking) {
+      // Attack - if has gun, shoot; if has sword, melee attack
+      if (input.mouseDown && player.attackCooldown <= 0 && !player.isDodging) {
         if (player.hasGun) {
           // SHOOT GUN - creates bullet and removes gun
           const bullet = createBullet(player.pos, player.angle || 0, pid);
@@ -821,8 +948,8 @@ export default class GameRoom implements Party.Server {
           for (let i = 0; i < 8; i++) {
             newParticles.push(createParticle(player.pos, '#fbbf24', 6, 'spark'));
           }
-        } else {
-          // Normal sword attack
+        } else if (player.hasSword) {
+          // Sword melee attack (only if player has sword)
           player.isAttacking = true;
           player.attackTimer = SWORD_ATTACK_DURATION;
           player.attackCooldown = SWORD_COOLDOWN;
@@ -850,25 +977,11 @@ export default class GameRoom implements Party.Server {
               const aDiff = angleDiff(player.angle || 0, angleToTarget);
 
               if (aDiff < SWORD_ARC / 2) {
-                let blocked = false;
-                if (target.isBlocking) {
-                  const angleToAttacker = Math.atan2(player.pos.y - target.pos.y, player.pos.x - target.pos.x);
-                  const blockDiff = angleDiff(target.angle || 0, angleToAttacker);
-                  if (blockDiff < SHIELD_BLOCK_ANGLE / 2) {
-                    blocked = true;
-                  }
-                }
-
-                if (blocked) {
-                  newShake += 5;
-                  for (let i = 0; i < 5; i++) newParticles.push(createParticle(target.pos, COLORS.shield, 4, 'spark'));
-                  const pushDir = normalize({ x: target.pos.x - player.pos.x, y: target.pos.y - player.pos.y });
-                  target.pos.x += pushDir.x * 40;
-                  target.pos.y += pushDir.y * 40;
-                } else if (!target.isDodging && target.hp > 0) {
+                // No more shield blocking - direct hit
+                if (!target.isDodging && target.hp > 0) {
                   target.hp = Math.max(0, target.hp - SWORD_DAMAGE);
                   newShake += 20;
-                  
+
                   // MASSIVE blood splash effect - many particles flying in all directions
                   for (let i = 0; i < 35; i++) {
                     newParticles.push(createParticle(target.pos, '#dc2626', 15, 'blood')); // Dark red
@@ -900,7 +1013,7 @@ export default class GameRoom implements Party.Server {
       if (player.attackTimer <= 0) player.isAttacking = false;
 
       // Dodge - only in movement direction (WASD), not mouse direction
-      if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0 && !player.isBlocking) {
+      if (keySet.has(' ') && !player.isDodging && player.cooldown <= 0) {
         let dashDir = { x: 0, y: 0 };
         if (keySet.has('w')) dashDir.y -= 1;
         if (keySet.has('s')) dashDir.y += 1;
@@ -990,18 +1103,36 @@ export default class GameRoom implements Party.Server {
         }
       });
 
-      // Gun pickup collision
+      // Gun pickup collision - mutually exclusive with sword
       newGunPickups.forEach(gp => {
         if (!gp.active) return;
         if (player.hasGun) return; // Already has gun
         const d = dist(player.pos, gp.pos);
         if (d < player.radius + GUN_PICKUP_RADIUS) {
-          // Pick up gun
+          // Pick up gun - drop sword if has one
           player.hasGun = true;
+          player.hasSword = false; // Mutually exclusive
           gp.active = false;
           // Yellow pickup particles
           for (let i = 0; i < 12; i++) {
             newParticles.push(createParticle(player.pos, '#fbbf24', 5, 'spark'));
+          }
+        }
+      });
+
+      // Sword pickup collision - mutually exclusive with gun
+      newSwordPickups.forEach(sp => {
+        if (!sp.active) return;
+        if (player.hasSword) return; // Already has sword
+        const d = dist(player.pos, sp.pos);
+        if (d < player.radius + SWORD_PICKUP_RADIUS) {
+          // Pick up sword - drop gun if has one
+          player.hasSword = true;
+          player.hasGun = false; // Mutually exclusive
+          sp.active = false;
+          // Silver/white pickup particles
+          for (let i = 0; i < 12; i++) {
+            newParticles.push(createParticle(player.pos, '#e5e7eb', 5, 'spark'));
           }
         }
       });
@@ -1037,7 +1168,9 @@ export default class GameRoom implements Party.Server {
     this.state.bombs = newBombs;
     this.state.healthPickups = newHealthPickups;
     this.state.gunPickups = newGunPickups.filter(gp => gp.active);
+    this.state.swordPickups = newSwordPickups.filter(sp => sp.active);
     this.state.bullets = newBullets;
+    this.state.thrownSwords = newThrownSwords;
     this.state.shake = newShake;
   }
 
