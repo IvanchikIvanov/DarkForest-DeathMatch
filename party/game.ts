@@ -728,6 +728,7 @@ export default class GameRoom implements Party.Server {
       // Spawn in center of arena for visibility
       const spawnX = CANVAS_WIDTH / 2;
       const spawnY = CANVAS_HEIGHT / 2;
+      console.log('[SERVER] Spawning health pickup at center:', spawnX, spawnY);
       this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
       this.state.lastHealthSpawnTime = 0;
     }
@@ -746,6 +747,7 @@ export default class GameRoom implements Party.Server {
     if (this.state.lastGunSpawnTime >= GUN_SPAWN_INTERVAL && this.state.gunPickups.length < MAX_GUN_PICKUPS) {
       const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
       const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
+      console.log('[SERVER] Spawning gun pickup at:', spawnX, spawnY);
       this.state.gunPickups.push(createGunPickup(spawnX, spawnY));
       this.state.lastGunSpawnTime = 0;
     }
