@@ -549,6 +549,69 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
+    // Draw Bomb Pickups - Orange bomb icon
+    const bombPickups = (state as any).bombPickups || [];
+    bombPickups.forEach((bp: any) => {
+      if (!bp.active) return;
+      ctx.save();
+      ctx.translate(bp.pos.x, bp.pos.y);
+
+      // Pulsing effect
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      ctx.scale(pulse, pulse);
+
+      // Outer glow
+      ctx.shadowColor = '#f97316';
+      ctx.shadowBlur = 35;
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.3)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bomb body (dark circle)
+      ctx.fillStyle = '#1f2937';
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bomb outline
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Highlight reflection
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.beginPath();
+      ctx.arc(-8, -8, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Fuse
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(15, -15);
+      ctx.lineTo(25, -28);
+      ctx.stroke();
+
+      // Fuse spark (flickering animation)
+      const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
+      ctx.shadowColor = '#ff6b00';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(25, -28, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner spark glow
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(25, -28, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
+
     // Draw Thrown Swords - Flying spinning swords
     const thrownSwords = (state as any).thrownSwords || [];
     thrownSwords.forEach((sword: any) => {
@@ -612,14 +675,24 @@ const GameCanvas: React.FC = () => {
 
       // Shield removed - no more blocking
 
-      // Weapon - Sword or Gun (mutually exclusive)
+      // Weapon - Sword, Gun, or Bomb (one at a time)
       const hasGun = (p as any).hasGun;
       const hasSword = (p as any).hasSword;
+      const hasBomb = (p as any).hasBomb;
+
+      // Calculate swing animation based on player velocity
+      const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
+      const swingAmount = Math.min(velMag / 500, 1) * 0.3; // Max 0.3 radians when moving
+      const movingSwing = Math.sin(timeRef.current * 8) * swingAmount;
+      // Gentle idle hover when stationary
+      const idleSwing = Math.sin(timeRef.current * 2) * 0.1;
+      const itemSwing = velMag > 10 ? movingSwing : idleSwing;
 
       if (hasGun) {
-        // Draw gun
+        // Draw gun with swing animation
         ctx.save();
-        ctx.translate(25, 0);
+        ctx.translate(25, 5);
+        ctx.rotate(itemSwing);
 
         // Gun shape
         ctx.fillStyle = '#fbbf24';
@@ -670,14 +743,53 @@ const GameCanvas: React.FC = () => {
           ctx.stroke();
           ctx.shadowBlur = 0;
         } else {
-          ctx.rotate(Math.PI / 4);
+          // Idle sword with swing animation
+          ctx.rotate(Math.PI / 4 + itemSwing);
           ctx.drawImage(assets.sword, 0, -52, 104, 104);
           ctx.restore();
         }
 
         ctx.restore();
+      } else if (hasBomb) {
+        // Draw bomb dangling next to player
+        ctx.save();
+        ctx.translate(25, 5);
+        ctx.rotate(itemSwing);
+
+        // Bomb body (dark circle)
+        ctx.fillStyle = '#1f2937';
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bomb outline
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Fuse
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(12, -10);
+        ctx.lineTo(18, -18);
+        ctx.stroke();
+
+        // Fuse spark (flickering)
+        const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+        ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(18, -18, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.restore();
       }
-      // If neither hasGun nor hasSword, player is unarmed (no weapon drawn)
+      // If no item, player is unarmed (no weapon drawn)
 
       // UI: Player name/ID
       ctx.fillStyle = '#fff';

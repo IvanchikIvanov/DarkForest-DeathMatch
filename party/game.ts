@@ -41,8 +41,9 @@ interface Player extends Entity {
   attackTimer: number;
   attackCooldown: number;
   bombCooldown: number;
-  hasGun: boolean; // Has picked up gun
+  hasGun: boolean;   // Has picked up gun
   hasSword: boolean; // Has picked up sword
+  hasBomb: boolean;  // Has picked up bomb
   score: number;
 }
 
@@ -92,6 +93,12 @@ interface SwordPickup {
   active: boolean;
 }
 
+interface BombPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
 interface ThrownSword {
   id: string;
   pos: Vector2;
@@ -117,6 +124,7 @@ interface GameState {
   healthPickups: HealthPickup[];
   gunPickups: GunPickup[];
   swordPickups: SwordPickup[];
+  bombPickups: BombPickup[];
   bullets: Bullet[];
   thrownSwords: ThrownSword[];
   tileMap?: number[][];
@@ -126,6 +134,7 @@ interface GameState {
   lastHealthSpawnTime: number;
   lastGunSpawnTime: number;
   lastSwordSpawnTime: number;
+  lastBombSpawnTime: number;
 }
 
 interface PlayerInput {
@@ -187,6 +196,14 @@ const SWORD_PICKUP_RADIUS = 25;
 const THROWN_SWORD_SPEED = 900;
 const THROWN_SWORD_DAMAGE = 35;
 const THROWN_SWORD_RADIUS = 15;
+
+// Bomb pickup constants
+const BOMB_SPAWN_INTERVAL = 10; // Seconds between bomb spawns
+const MAX_BOMB_PICKUPS = 3; // Allow up to 3 bombs at a time
+const BOMB_PICKUP_RADIUS = 25;
+
+// Center spawn cluster radius for all pickups
+const CENTER_SPAWN_RADIUS = 100;
 
 // Terrain constants
 const WATER_SPEED_MOD = 0.5;
@@ -358,34 +375,47 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
   return { walls, tileMap, obstacles };
 };
 
-const createPlayer = (id: string, index: number): Player => ({
-  id: `p-${id}`,
-  playerId: id,
-  type: EntityType.PLAYER,
-  pos: {
-    x: CANVAS_WIDTH / 2 + (index === 0 ? -600 : 600),
-    y: CANVAS_HEIGHT / 2
-  },
-  vel: { x: 0, y: 0 },
-  radius: 20,
-  color: index === 0 ? COLORS.player : COLORS.enemy,
-  active: true,
-  hp: PLAYER_HP,
-  maxHp: PLAYER_HP,
-  isDodging: false,
-  dodgeTimer: 0,
-  cooldown: 0,
-  knockbackVel: { x: 0, y: 0 },
-  angle: index === 0 ? 0 : Math.PI,
-  isBlocking: false,
-  isAttacking: false,
-  attackTimer: 0,
-  attackCooldown: 0,
-  bombCooldown: 0,
-  hasGun: false,
-  hasSword: true, // Start with sword
-  score: 0
-});
+const createPlayer = (id: string, index: number): Player => {
+  // Spawn players at perimeter of arena, facing center
+  const centerX = CANVAS_WIDTH / 2;  // 2400
+  const centerY = CANVAS_HEIGHT / 2; // 1800
+  const spawnRadius = 1500; // Distance from center to spawn point
+
+  // For 2 players, spawn at opposite sides (index 0 = left, index 1 = right)
+  const spawnAngle = index === 0 ? Math.PI : 0;
+  const spawnX = centerX + Math.cos(spawnAngle) * spawnRadius;
+  const spawnY = centerY + Math.sin(spawnAngle) * spawnRadius;
+
+  // Face toward center
+  const faceAngle = Math.atan2(centerY - spawnY, centerX - spawnX);
+
+  return {
+    id: `p-${id}`,
+    playerId: id,
+    type: EntityType.PLAYER,
+    pos: { x: spawnX, y: spawnY },
+    vel: { x: 0, y: 0 },
+    radius: 20,
+    color: index === 0 ? COLORS.player : COLORS.enemy,
+    active: true,
+    hp: PLAYER_HP,
+    maxHp: PLAYER_HP,
+    isDodging: false,
+    dodgeTimer: 0,
+    cooldown: 0,
+    knockbackVel: { x: 0, y: 0 },
+    angle: faceAngle,
+    isBlocking: false,
+    isAttacking: false,
+    attackTimer: 0,
+    attackCooldown: 0,
+    bombCooldown: 0,
+    hasGun: false,
+    hasSword: false, // Start unarmed - must pick up weapons
+    hasBomb: false,  // Start without bomb
+    score: 0
+  };
+};
 
 const createGunPickup = (x: number, y: number): GunPickup => ({
   id: `gun-${Math.random()}`,
@@ -398,6 +428,22 @@ const createSwordPickup = (x: number, y: number): SwordPickup => ({
   pos: { x, y },
   active: true
 });
+
+const createBombPickup = (x: number, y: number): BombPickup => ({
+  id: `bomb-pickup-${Math.random()}`,
+  pos: { x, y },
+  active: true
+});
+
+// Helper function to spawn items at center cluster
+const spawnAtCenter = (): Vector2 => {
+  const angle = Math.random() * Math.PI * 2;
+  const radius = Math.random() * CENTER_SPAWN_RADIUS;
+  return {
+    x: CANVAS_WIDTH / 2 + Math.cos(angle) * radius,
+    y: CANVAS_HEIGHT / 2 + Math.sin(angle) * radius
+  };
+};
 
 const createThrownSword = (pos: Vector2, angle: number, ownerId: string): ThrownSword => ({
   id: `thrown-sword-${Math.random()}`,
@@ -524,12 +570,14 @@ export default class GameRoom implements Party.Server {
       healthPickups: [],
       gunPickups: [],
       swordPickups: [],
+      bombPickups: [],
       bullets: [],
       thrownSwords: [],
       tileMap: tileMap,
       lastHealthSpawnTime: 0,
       lastGunSpawnTime: 0,
-      lastSwordSpawnTime: 0
+      lastSwordSpawnTime: 0,
+      lastBombSpawnTime: 0
     };
   }
 
@@ -578,12 +626,14 @@ export default class GameRoom implements Party.Server {
               healthPickups: [],
               gunPickups: [],
               swordPickups: [],
+              bombPickups: [],
               bullets: [],
               thrownSwords: [],
               tileMap: tileMap,
               lastHealthSpawnTime: 0,
               lastGunSpawnTime: 0,
-              lastSwordSpawnTime: 0
+              lastSwordSpawnTime: 0,
+              lastBombSpawnTime: 0
             };
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
@@ -722,43 +772,46 @@ export default class GameRoom implements Party.Server {
       return true;
     });
 
-    // Spawn health pickups every 15 seconds (max 4)
+    // Spawn health pickups at center cluster (max 4)
     // Spawn one immediately if none exist
     if (this.state.healthPickups.length === 0) {
-      // Spawn in center of arena for visibility
-      const spawnX = CANVAS_WIDTH / 2;
-      const spawnY = CANVAS_HEIGHT / 2;
-      console.log('[SERVER] Spawning health pickup at center:', spawnX, spawnY);
-      this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
-      this.state.lastHealthSpawnTime = 0;
-    }
-    
-    this.state.lastHealthSpawnTime += DT;
-    if (this.state.lastHealthSpawnTime >= HEALTH_SPAWN_INTERVAL && this.state.healthPickups.length < MAX_HEALTH_PICKUPS) {
-      // Spawn at random position in arena (closer to center)
-      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1000;
-      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 800;
-      this.state.healthPickups.push(createHealthPickup(spawnX, spawnY));
+      const spawnPos = spawnAtCenter();
+      console.log('[SERVER] Spawning health pickup at center:', spawnPos.x, spawnPos.y);
+      this.state.healthPickups.push(createHealthPickup(spawnPos.x, spawnPos.y));
       this.state.lastHealthSpawnTime = 0;
     }
 
-    // Spawn gun pickup every 20 seconds (max 2)
+    this.state.lastHealthSpawnTime += DT;
+    if (this.state.lastHealthSpawnTime >= HEALTH_SPAWN_INTERVAL && this.state.healthPickups.length < MAX_HEALTH_PICKUPS) {
+      const spawnPos = spawnAtCenter();
+      this.state.healthPickups.push(createHealthPickup(spawnPos.x, spawnPos.y));
+      this.state.lastHealthSpawnTime = 0;
+    }
+
+    // Spawn gun pickup at center cluster (max 2)
     this.state.lastGunSpawnTime += DT;
     if (this.state.lastGunSpawnTime >= GUN_SPAWN_INTERVAL && this.state.gunPickups.length < MAX_GUN_PICKUPS) {
-      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
-      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
-      console.log('[SERVER] Spawning gun pickup at:', spawnX, spawnY);
-      this.state.gunPickups.push(createGunPickup(spawnX, spawnY));
+      const spawnPos = spawnAtCenter();
+      console.log('[SERVER] Spawning gun pickup at:', spawnPos.x, spawnPos.y);
+      this.state.gunPickups.push(createGunPickup(spawnPos.x, spawnPos.y));
       this.state.lastGunSpawnTime = 0;
     }
 
-    // Spawn sword pickup every 15 seconds (max 2)
+    // Spawn sword pickup at center cluster (max 2)
     this.state.lastSwordSpawnTime += DT;
     if (this.state.lastSwordSpawnTime >= SWORD_SPAWN_INTERVAL && this.state.swordPickups.length < MAX_SWORD_PICKUPS) {
-      const spawnX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 1500;
-      const spawnY = CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 1200;
-      this.state.swordPickups.push(createSwordPickup(spawnX, spawnY));
+      const spawnPos = spawnAtCenter();
+      this.state.swordPickups.push(createSwordPickup(spawnPos.x, spawnPos.y));
       this.state.lastSwordSpawnTime = 0;
+    }
+
+    // Spawn bomb pickup at center cluster (max 3)
+    this.state.lastBombSpawnTime += DT;
+    if (this.state.lastBombSpawnTime >= BOMB_SPAWN_INTERVAL && this.state.bombPickups.length < MAX_BOMB_PICKUPS) {
+      const spawnPos = spawnAtCenter();
+      console.log('[SERVER] Spawning bomb pickup at:', spawnPos.x, spawnPos.y);
+      this.state.bombPickups.push(createBombPickup(spawnPos.x, spawnPos.y));
+      this.state.lastBombSpawnTime = 0;
     }
 
     // Update bullets
@@ -875,12 +928,15 @@ export default class GameRoom implements Party.Server {
 
     // Update health pickups
     let newHealthPickups = this.state.healthPickups.filter(hp => hp.active);
-    
+
     // Update gun pickups
     let newGunPickups = this.state.gunPickups.filter(gp => gp.active);
 
     // Update sword pickups
     let newSwordPickups = this.state.swordPickups.filter(sp => sp.active);
+
+    // Update bomb pickups
+    let newBombPickups = this.state.bombPickups.filter(bp => bp.active);
 
     playerIds.forEach(pid => {
       const player = this.state.players[pid];
@@ -917,8 +973,8 @@ export default class GameRoom implements Party.Server {
         }
       }
 
-      // Bomb throwing (E key) - throw in direction of cursor
-      if (input.throwBomb && player.bombCooldown <= 0 && !player.isDodging) {
+      // Bomb throwing (E key) - requires bomb pickup
+      if (input.throwBomb && player.hasBomb && !player.isDodging) {
         // Calculate angle directly from mouse position to ensure accurate direction
         const bombDx = input.mouse.x - player.pos.x;
         const bombDy = input.mouse.y - player.pos.y;
@@ -929,11 +985,15 @@ export default class GameRoom implements Party.Server {
           const tile = getTileAt(this.state.tileMap, bomb.pos.x, bomb.pos.y);
           if (tile !== TILE_WALL && tile !== TILE_WALL_TOP && tile !== TILE_STONE) {
             newBombs.push(bomb);
-            player.bombCooldown = BOMB_COOLDOWN;
+            player.hasBomb = false; // Consume bomb after throwing
           }
         } else {
           newBombs.push(bomb);
-          player.bombCooldown = BOMB_COOLDOWN;
+          player.hasBomb = false; // Consume bomb after throwing
+        }
+        // Orange throw particles
+        for (let i = 0; i < 6; i++) {
+          newParticles.push(createParticle(player.pos, '#f97316', 4, 'spark'));
         }
       }
 
@@ -1105,15 +1165,16 @@ export default class GameRoom implements Party.Server {
         }
       });
 
-      // Gun pickup collision - mutually exclusive with sword
+      // Gun pickup collision - one item at a time
       newGunPickups.forEach(gp => {
         if (!gp.active) return;
         if (player.hasGun) return; // Already has gun
         const d = dist(player.pos, gp.pos);
         if (d < player.radius + GUN_PICKUP_RADIUS) {
-          // Pick up gun - drop sword if has one
+          // Pick up gun - drop any other item
           player.hasGun = true;
-          player.hasSword = false; // Mutually exclusive
+          player.hasSword = false;
+          player.hasBomb = false;
           gp.active = false;
           // Yellow pickup particles
           for (let i = 0; i < 12; i++) {
@@ -1122,19 +1183,38 @@ export default class GameRoom implements Party.Server {
         }
       });
 
-      // Sword pickup collision - mutually exclusive with gun
+      // Sword pickup collision - one item at a time
       newSwordPickups.forEach(sp => {
         if (!sp.active) return;
         if (player.hasSword) return; // Already has sword
         const d = dist(player.pos, sp.pos);
         if (d < player.radius + SWORD_PICKUP_RADIUS) {
-          // Pick up sword - drop gun if has one
+          // Pick up sword - drop any other item
           player.hasSword = true;
-          player.hasGun = false; // Mutually exclusive
+          player.hasGun = false;
+          player.hasBomb = false;
           sp.active = false;
           // Silver/white pickup particles
           for (let i = 0; i < 12; i++) {
             newParticles.push(createParticle(player.pos, '#e5e7eb', 5, 'spark'));
+          }
+        }
+      });
+
+      // Bomb pickup collision - one item at a time
+      newBombPickups.forEach(bp => {
+        if (!bp.active) return;
+        if (player.hasBomb) return; // Already has bomb
+        const d = dist(player.pos, bp.pos);
+        if (d < player.radius + BOMB_PICKUP_RADIUS) {
+          // Pick up bomb - drop any other item
+          player.hasBomb = true;
+          player.hasGun = false;
+          player.hasSword = false;
+          bp.active = false;
+          // Orange pickup particles
+          for (let i = 0; i < 12; i++) {
+            newParticles.push(createParticle(player.pos, '#f97316', 5, 'spark'));
           }
         }
       });
@@ -1171,6 +1251,7 @@ export default class GameRoom implements Party.Server {
     this.state.healthPickups = newHealthPickups;
     this.state.gunPickups = newGunPickups.filter(gp => gp.active);
     this.state.swordPickups = newSwordPickups.filter(sp => sp.active);
+    this.state.bombPickups = newBombPickups.filter(bp => bp.active);
     this.state.bullets = newBullets;
     this.state.thrownSwords = newThrownSwords;
     this.state.shake = newShake;
