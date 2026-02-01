@@ -73,6 +73,8 @@ const GameCanvas: React.FC = () => {
   useEffect(() => {
     const client = new PartyClient({
       onStateUpdate: (state, hostId) => {
+        // DEBUG: Log what server is sending
+        console.log('[STATE_UPDATE] Received state - healthPickups:', state.healthPickups?.length, 'gunPickups:', state.gunPickups?.length, 'swordPickups:', state.swordPickups?.length, 'status:', state.status);
         stateRef.current = state;
         setUiState({
           status: state.status,
@@ -396,11 +398,12 @@ const GameCanvas: React.FC = () => {
     }
 
     // Draw Health Pickups - HUGE AND SUPER VISIBLE
-    const healthPickups = (state as any).healthPickups || [];
-    // DEBUG: Log health pickups (every 60 frames = ~1 second)
-    if (Math.floor(timeRef.current * 60) % 60 === 0) {
-      console.log('[RENDER] Health pickups:', healthPickups.length, 'Gun pickups:', ((state as any).gunPickups || []).length, 'Sword pickups:', ((state as any).swordPickups || []).length);
-    }
+    const healthPickups = state.healthPickups || [];
+    const gunPickups = state.gunPickups || [];
+    const swordPickups = (state as any).swordPickups || [];
+
+    // DEBUG: Log every frame to trace the issue
+    console.log('[RENDER] status:', state.status, 'healthPickups:', healthPickups.length, 'gunPickups:', gunPickups.length, 'swordPickups:', swordPickups.length);
     healthPickups.forEach((hp: any) => {
       if (!hp || !hp.active) return;
       
@@ -441,7 +444,7 @@ const GameCanvas: React.FC = () => {
     });
 
     // Draw Gun Pickups - Golden pistol icon
-    const gunPickups = (state as any).gunPickups || [];
+    // gunPickups already defined above
     gunPickups.forEach((gp: any) => {
       if (!gp.active) return;
       ctx.save();
@@ -511,7 +514,7 @@ const GameCanvas: React.FC = () => {
     }
 
     // Draw Sword Pickups - Silver/white sword icon
-    const swordPickups = (state as any).swordPickups || [];
+    // swordPickups already defined above
     swordPickups.forEach((sp: any) => {
       if (!sp.active) return;
       ctx.save();
