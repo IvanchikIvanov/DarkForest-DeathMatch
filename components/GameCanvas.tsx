@@ -878,22 +878,25 @@ const GameCanvas: React.FC = () => {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // DEBUG overlay - shows pickup counts and player weapon state
-    if (state.status === 'PLAYING') {
+    // DEBUG overlay - ALWAYS visible
+    {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#00ff00';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 16px monospace';
       ctx.textAlign = 'left';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 4;
       const hp = state.healthPickups || [];
       const gp = state.gunPickups || [];
       const sp = (state as any).swordPickups || [];
       const bp = (state as any).bombPickups || [];
       const players = Object.values(state.players);
-      ctx.fillText(`HP pickups: ${hp.length} | Gun: ${gp.length} | Sword: ${sp.length} | Bomb: ${bp.length}`, 10, 20);
+      ctx.fillText(`STATUS: ${state.status} | HP: ${hp.length} Gun: ${gp.length} Sword: ${sp.length} Bomb: ${bp.length}`, 10, 20);
       players.forEach((pl: any, i: number) => {
-        ctx.fillText(`P${i}: hasGun=${pl.hasGun} hasSword=${pl.hasSword} hasBomb=${pl.hasBomb}`, 10, 40 + i * 20);
+        ctx.fillText(`P${i}: gun=${pl.hasGun} sword=${pl.hasSword} bomb=${pl.hasBomb} active=${pl.active}`, 10, 44 + i * 22);
       });
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
 
