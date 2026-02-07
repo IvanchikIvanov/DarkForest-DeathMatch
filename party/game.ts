@@ -607,6 +607,8 @@ export default class GameRoom implements Party.Server {
         case 'START':
           if (sender.id === this.hostId && Object.keys(this.state.players).length >= 2) {
             this.state.status = 'PLAYING';
+            // Spawn initial pickups immediately so arena isn't empty
+            this.spawnInitialPickups();
             this.startGameLoop();
             this.broadcast();
           }
@@ -638,6 +640,7 @@ export default class GameRoom implements Party.Server {
             playerIds.forEach((pid, idx) => {
               this.state.players[pid] = createPlayer(pid, idx);
             });
+            this.spawnInitialPickups();
             this.broadcast();
           }
           break;
@@ -660,6 +663,30 @@ export default class GameRoom implements Party.Server {
       this.state.status = 'LOBBY';
     }
     this.broadcast();
+  }
+
+  spawnInitialPickups() {
+    // Spawn one of each pickup type at center so the arena starts with items
+    const healthPos = spawnAtCenter();
+    this.state.healthPickups.push(createHealthPickup(healthPos.x, healthPos.y));
+
+    const gunPos = spawnAtCenter();
+    this.state.gunPickups.push(createGunPickup(gunPos.x, gunPos.y));
+
+    const swordPos1 = spawnAtCenter();
+    this.state.swordPickups.push(createSwordPickup(swordPos1.x, swordPos1.y));
+
+    const swordPos2 = spawnAtCenter();
+    this.state.swordPickups.push(createSwordPickup(swordPos2.x, swordPos2.y));
+
+    const bombPos = spawnAtCenter();
+    this.state.bombPickups.push(createBombPickup(bombPos.x, bombPos.y));
+
+    // Reset spawn timers so next spawns happen after normal intervals
+    this.state.lastHealthSpawnTime = 0;
+    this.state.lastGunSpawnTime = 0;
+    this.state.lastSwordSpawnTime = 0;
+    this.state.lastBombSpawnTime = 0;
   }
 
   startGameLoop() {
@@ -776,7 +803,6 @@ export default class GameRoom implements Party.Server {
     // Spawn one immediately if none exist
     if (this.state.healthPickups.length === 0) {
       const spawnPos = spawnAtCenter();
-      console.log('[SERVER] Spawning health pickup at center:', spawnPos.x, spawnPos.y);
       this.state.healthPickups.push(createHealthPickup(spawnPos.x, spawnPos.y));
       this.state.lastHealthSpawnTime = 0;
     }
@@ -792,7 +818,6 @@ export default class GameRoom implements Party.Server {
     this.state.lastGunSpawnTime += DT;
     if (this.state.lastGunSpawnTime >= GUN_SPAWN_INTERVAL && this.state.gunPickups.length < MAX_GUN_PICKUPS) {
       const spawnPos = spawnAtCenter();
-      console.log('[SERVER] Spawning gun pickup at:', spawnPos.x, spawnPos.y);
       this.state.gunPickups.push(createGunPickup(spawnPos.x, spawnPos.y));
       this.state.lastGunSpawnTime = 0;
     }
@@ -809,7 +834,6 @@ export default class GameRoom implements Party.Server {
     this.state.lastBombSpawnTime += DT;
     if (this.state.lastBombSpawnTime >= BOMB_SPAWN_INTERVAL && this.state.bombPickups.length < MAX_BOMB_PICKUPS) {
       const spawnPos = spawnAtCenter();
-      console.log('[SERVER] Spawning bomb pickup at:', spawnPos.x, spawnPos.y);
       this.state.bombPickups.push(createBombPickup(spawnPos.x, spawnPos.y));
       this.state.lastBombSpawnTime = 0;
     }

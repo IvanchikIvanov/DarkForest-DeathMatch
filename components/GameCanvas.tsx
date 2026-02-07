@@ -73,8 +73,6 @@ const GameCanvas: React.FC = () => {
   useEffect(() => {
     const client = new PartyClient({
       onStateUpdate: (state, hostId) => {
-        // DEBUG: Log what server is sending
-        console.log('[STATE_UPDATE] Received state - healthPickups:', state.healthPickups?.length, 'gunPickups:', state.gunPickups?.length, 'swordPickups:', state.swordPickups?.length, 'status:', state.status);
         stateRef.current = state;
         setUiState({
           status: state.status,
@@ -402,8 +400,6 @@ const GameCanvas: React.FC = () => {
     const gunPickups = state.gunPickups || [];
     const swordPickups = (state as any).swordPickups || [];
 
-    // DEBUG: Log every frame to trace the issue
-    console.log('[RENDER] status:', state.status, 'healthPickups:', healthPickups.length, 'gunPickups:', gunPickups.length, 'swordPickups:', swordPickups.length);
     healthPickups.forEach((hp: any) => {
       if (!hp || !hp.active) return;
       
@@ -645,6 +641,14 @@ const GameCanvas: React.FC = () => {
     // Draw Players
     Object.values(state.players).forEach(p => {
       if (!p.active) return;
+      const isMe = p.playerId === playerIdRef.current;
+
+      // Weapon - Sword, Gun, or Bomb (one at a time)
+      const hasGun = (p as any).hasGun;
+      const hasSword = (p as any).hasSword;
+      const hasBomb = (p as any).hasBomb;
+
+      // Draw player body (rotated)
       ctx.save();
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate(p.angle || 0);
@@ -667,60 +671,41 @@ const GameCanvas: React.FC = () => {
       }
 
       const pSize = p.radius * 2.5;
-      const isMe = p.playerId === playerIdRef.current;
 
       // Use different sprites for players
       const playerSprite = isMe ? assets.player : assets.playerEnemy;
       ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
 
-      // Shield removed - no more blocking
-
-      // Weapon - Sword, Gun, or Bomb (one at a time)
-      const hasGun = (p as any).hasGun;
-      const hasSword = (p as any).hasSword;
-      const hasBomb = (p as any).hasBomb;
-
       // Calculate swing animation based on player velocity
       const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
-      const swingAmount = Math.min(velMag / 500, 1) * 0.3; // Max 0.3 radians when moving
+      const swingAmount = Math.min(velMag / 500, 1) * 0.3;
       const movingSwing = Math.sin(timeRef.current * 8) * swingAmount;
-      // Gentle idle hover when stationary
       const idleSwing = Math.sin(timeRef.current * 2) * 0.1;
       const itemSwing = velMag > 10 ? movingSwing : idleSwing;
 
+      // Only draw weapon if player has one
       if (hasGun) {
-        // Draw gun with swing animation
         ctx.save();
         ctx.translate(25, 5);
         ctx.rotate(itemSwing);
-
-        // Gun shape
         ctx.fillStyle = '#fbbf24';
         ctx.shadowColor = '#fbbf24';
         ctx.shadowBlur = 10;
-        // Barrel
         ctx.fillRect(0, -5, 35, 10);
-        // Handle
         ctx.fillRect(-5, -5, 12, 25);
-
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.strokeRect(0, -5, 35, 10);
         ctx.strokeRect(-5, -5, 12, 25);
-
         ctx.shadowBlur = 0;
         ctx.restore();
       } else if (hasSword) {
-        // Draw sword
         ctx.save();
         ctx.translate(15, -10);
-
         if (p.isAttacking) {
           const progress = 1 - (p.attackTimer / 0.2);
           const swingAngle = -Math.PI / 2 + (progress * Math.PI);
           ctx.rotate(swingAngle);
-
-          // Sword trail effect
           ctx.globalAlpha = 0.4;
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 8;
@@ -728,12 +713,15 @@ const GameCanvas: React.FC = () => {
           ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
           ctx.stroke();
           ctx.globalAlpha = 1;
-
           ctx.drawImage(assets.sword, 0, -52, 104, 104);
+        } else {
+          ctx.rotate(Math.PI / 4 + itemSwing);
+          ctx.drawImage(assets.sword, 0, -52, 104, 104);
+        }
+        ctx.restore();
 
-          ctx.restore();
-
-          // Additional swing arc
+        // Additional swing arc (drawn in player-translated space, outside sword save/restore)
+        if (p.isAttacking) {
           ctx.beginPath();
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
           ctx.lineWidth = 4;
@@ -742,42 +730,26 @@ const GameCanvas: React.FC = () => {
           ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
           ctx.stroke();
           ctx.shadowBlur = 0;
-        } else {
-          // Idle sword with swing animation
-          ctx.rotate(Math.PI / 4 + itemSwing);
-          ctx.drawImage(assets.sword, 0, -52, 104, 104);
-          ctx.restore();
         }
-
-        ctx.restore();
       } else if (hasBomb) {
-        // Draw bomb dangling next to player
         ctx.save();
         ctx.translate(25, 5);
         ctx.rotate(itemSwing);
-
-        // Bomb body (dark circle)
         ctx.fillStyle = '#1f2937';
         ctx.shadowColor = '#f97316';
         ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.arc(0, 0, 18, 0, Math.PI * 2);
         ctx.fill();
-
-        // Bomb outline
         ctx.strokeStyle = '#374151';
         ctx.lineWidth = 2;
         ctx.stroke();
-
-        // Fuse
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(12, -10);
         ctx.lineTo(18, -18);
         ctx.stroke();
-
-        // Fuse spark (flickering)
         const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
         ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
         ctx.shadowColor = '#f97316';
@@ -785,13 +757,15 @@ const GameCanvas: React.FC = () => {
         ctx.beginPath();
         ctx.arc(18, -18, 4, 0, Math.PI * 2);
         ctx.fill();
-
         ctx.shadowBlur = 0;
         ctx.restore();
       }
       // If no item, player is unarmed (no weapon drawn)
 
-      // UI: Player name/ID
+      ctx.restore(); // End player rotated transform
+
+      // UI elements drawn in world space (not rotated)
+      // Player name/ID
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
@@ -800,16 +774,14 @@ const GameCanvas: React.FC = () => {
       ctx.fillText(isMe ? 'YOU' : `P${p.playerId.slice(0, 4)}`, p.pos.x, p.pos.y - 35);
       ctx.shadowBlur = 0;
 
-      // UI: HP Bar with gradient
+      // HP Bar
       const hpPercent = (p.hp || 0) / (p.maxHp || 100);
       const hpBarWidth = 44;
       const hpBarHeight = 6;
 
-      // Background
       ctx.fillStyle = '#1f1f1f';
       ctx.fillRect(p.pos.x - hpBarWidth / 2 - 2, p.pos.y + 22, hpBarWidth + 4, hpBarHeight + 4);
 
-      // HP fill
       const hpGradient = ctx.createLinearGradient(p.pos.x - hpBarWidth / 2, 0, p.pos.x + hpBarWidth / 2, 0);
       if (hpPercent > 0.5) {
         hpGradient.addColorStop(0, '#22c55e');
@@ -824,31 +796,24 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = hpGradient;
       ctx.fillRect(p.pos.x - hpBarWidth / 2, p.pos.y + 24, hpBarWidth * hpPercent, hpBarHeight);
 
-      // Border
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1;
       ctx.strokeRect(p.pos.x - hpBarWidth / 2 - 1, p.pos.y + 23, hpBarWidth + 2, hpBarHeight + 2);
 
-      // WHITE dodge recovery bar (above HP bar)
+      // Dodge recovery bar
       const dodgeCooldown = p.cooldown || 0;
       const dodgeBarWidth = 44;
       const dodgeBarY = p.pos.y - 45;
-      
-      // Background
       ctx.fillStyle = '#333';
       ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
-      
-      // Recovery fill (white) - fills up as cooldown recovers
       const dodgeReady = 1 - dodgeCooldown;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth * dodgeReady, 4);
-      
-      // Border
       ctx.strokeStyle = '#666';
       ctx.lineWidth = 1;
       ctx.strokeRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
 
-      // Bomb cooldown indicator (pink)
+      // Bomb cooldown indicator
       const bombCooldown = (p as any).bombCooldown || 0;
       if (bombCooldown > 0) {
         ctx.fillStyle = '#ec4899';
