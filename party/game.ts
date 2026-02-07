@@ -202,8 +202,14 @@ const BOMB_SPAWN_INTERVAL = 10; // Seconds between bomb spawns
 const MAX_BOMB_PICKUPS = 3; // Allow up to 3 bombs at a time
 const BOMB_PICKUP_RADIUS = 25;
 
-// Center spawn cluster radius for all pickups
-const CENTER_SPAWN_RADIUS = 100;
+// Random spawn across arena (radius in pixels, inside playable circle)
+const ARENA_SPAWN_RADIUS_PX =
+  (Math.min(
+    Math.ceil(CANVAS_WIDTH / TILE_SIZE),
+    Math.ceil(CANVAS_HEIGHT / TILE_SIZE)
+  ) / 2 -
+    4) *
+  TILE_SIZE;
 
 // Terrain constants
 const WATER_SPEED_MOD = 0.5;
@@ -438,7 +444,7 @@ const createBombPickup = (x: number, y: number): BombPickup => ({
 // Helper function to spawn items at center cluster
 const spawnAtCenter = (): Vector2 => {
   const angle = Math.random() * Math.PI * 2;
-  const radius = Math.random() * CENTER_SPAWN_RADIUS;
+  const radius = Math.random() * ARENA_SPAWN_RADIUS_PX;
   return {
     x: CANVAS_WIDTH / 2 + Math.cos(angle) * radius,
     y: CANVAS_HEIGHT / 2 + Math.sin(angle) * radius
@@ -902,9 +908,31 @@ export default class GameRoom implements Party.Server {
       sword.pos.x += sword.vel.x * DT;
       sword.pos.y += sword.vel.y * DT;
 
-      // Check if out of bounds
-      if (sword.pos.x < 0 || sword.pos.x > CANVAS_WIDTH || sword.pos.y < 0 || sword.pos.y > CANVAS_HEIGHT) {
-        return false;
+      // Bounce off arena walls (tileMap) so sword stays inside
+      const tileMap = this.state.tileMap;
+      if (tileMap) {
+        const tileAt = (x: number, y: number) => {
+          const tx = Math.floor(x / TILE_SIZE);
+          const ty = Math.floor(y / TILE_SIZE);
+          if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return TILE_WALL;
+          const t = tileMap[ty][tx];
+          return t === TILE_WALL || t === TILE_WALL_TOP || t === TILE_STONE ? TILE_WALL : t;
+        };
+        const inWall = (x: number, y: number) => tileAt(x, y) === TILE_WALL;
+        if (inWall(sword.pos.x, sword.pos.y)) {
+          // Rollback
+          sword.pos.x -= sword.vel.x * DT;
+          sword.pos.y -= sword.vel.y * DT;
+          // Reflect: which axis crossed into wall
+          if (inWall(sword.pos.x + sword.vel.x * DT, sword.pos.y)) sword.vel.x = -sword.vel.x;
+          if (inWall(sword.pos.x, sword.pos.y + sword.vel.y * DT)) sword.vel.y = -sword.vel.y;
+          // Step again with new velocity
+          sword.pos.x += sword.vel.x * DT;
+          sword.pos.y += sword.vel.y * DT;
+        }
+        // Clamp to canvas so we don't leave the map
+        sword.pos.x = clamp(sword.pos.x, 0, CANVAS_WIDTH);
+        sword.pos.y = clamp(sword.pos.y, 0, CANVAS_HEIGHT);
       }
 
       // Check collision with players
