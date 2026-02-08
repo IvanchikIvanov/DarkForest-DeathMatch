@@ -1,9 +1,9 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS } from '../constants';
-import { GameState, PlayerInput, GameAssets, Bomb, Obstacle } from '../types';
+import { GameState, PlayerInput, Bomb, Obstacle } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
-import { generateAssets } from '../utils/assetGenerator';
+// Asset generator no longer needed - all rendering is vector-based
 import { Trophy, Users, Copy, Play, Shield, Sword, User, Bomb as BombIcon } from 'lucide-react';
 import WalletConnect from './WalletConnect';
 import BetSelector from './BetSelector';
@@ -16,7 +16,7 @@ const GameCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | null>(null);
   const stateRef = useRef<GameState>(createInitialState());
-  const assetsRef = useRef<GameAssets | null>(null);
+  // Assets no longer used for in-world rendering (all vector now)
 
   // Inputs
   const keysRef = useRef<Set<string>>(new Set());
@@ -61,12 +61,9 @@ const GameCanvas: React.FC = () => {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // --- Asset Loading ---
+  // Assets no longer loaded - all rendering is vector-based
   useEffect(() => {
-    generateAssets().then(assets => {
-      assetsRef.current = assets;
-      setUiState(prev => ({ ...prev, assetsLoaded: true }));
-    });
+    setUiState(prev => ({ ...prev, assetsLoaded: true }));
   }, []);
 
   // --- Initialize PartyKit Client ---
@@ -205,12 +202,6 @@ const GameCanvas: React.FC = () => {
     partyClientRef.current?.startGame();
   };
 
-  const resetGame = () => {
-    if (isHost) {
-      partyClientRef.current?.resetGame();
-    }
-  };
-
   // --- Input Handlers ---
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     keysRef.current.add(e.key.toLowerCase());
@@ -273,20 +264,8 @@ const GameCanvas: React.FC = () => {
 
   // --- Drawing ---
   const draw = (ctx: CanvasRenderingContext2D, state: GameState) => {
-    const assets = assetsRef.current;
     const canvasWidth = canvasRef.current?.width || 800;
     const canvasHeight = canvasRef.current?.height || 600;
-    
-    if (!assets) {
-      // Clear canvas and show loading state
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-      ctx.fillStyle = '#fff';
-      ctx.font = '20px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Loading assets...', canvasWidth / 2, canvasHeight / 2);
-      return;
-    }
 
     timeRef.current += 0.016;
 
@@ -306,40 +285,141 @@ const GameCanvas: React.FC = () => {
     ctx.translate(offsetX + shakeX, offsetY + shakeY);
     ctx.scale(scale, scale);
 
-    // TileMap with animated water
+    // TileMap - vector style
     if (state.tileMap) {
       for (let y = 0; y < state.tileMap.length; y++) {
         for (let x = 0; x < state.tileMap[y].length; x++) {
           const tileIdx = state.tileMap[y][x];
-          const tile = assets.tiles[tileIdx];
-          if (tile) {
-            ctx.drawImage(tile, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          const tx = x * TILE_SIZE;
+          const ty = y * TILE_SIZE;
 
-            // Animated water effect
-            if (tileIdx === 4) { // Water tile
-              const waveOffset = Math.sin(timeRef.current * 2 + x * 0.5 + y * 0.3) * 2;
-              ctx.fillStyle = 'rgba(96, 165, 250, 0.3)';
+          if (tileIdx === 0) {
+            // Floor tile - dark zinc with subtle grid
+            ctx.fillStyle = '#27272a';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#18181b';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tx + 1, ty + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+          } else if (tileIdx === 1) {
+            // Wall tile
+            ctx.fillStyle = '#52525b';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#3f3f46';
+            ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, 24);
+            ctx.fillRect(tx + 4, ty + 34, 26, 24);
+            ctx.fillRect(tx + 34, ty + 34, 26, 24);
+            ctx.strokeStyle = '#71717a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+          } else if (tileIdx === 2) {
+            // Wall top
+            ctx.fillStyle = '#71717a';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#52525b';
+            ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+            ctx.strokeStyle = '#a1a1aa';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(tx + 8, ty + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+          } else if (tileIdx === 3) {
+            // Grass tile - green base with small blade details
+            ctx.fillStyle = '#15803d';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            // Grass blade details (deterministic from position)
+            ctx.fillStyle = '#22c55e';
+            const seed = x * 7 + y * 13;
+            for (let i = 0; i < 8; i++) {
+              const bx = tx + ((seed + i * 17) % 58) + 3;
+              const by = ty + ((seed + i * 23) % 54) + 5;
+              ctx.fillRect(bx, by, 2, 5);
+            }
+            ctx.fillStyle = '#4ade80';
+            for (let i = 0; i < 4; i++) {
+              const bx = tx + ((seed + i * 31) % 56) + 4;
+              const by = ty + ((seed + i * 41) % 52) + 6;
+              ctx.fillRect(bx, by, 3, 4);
+            }
+          } else if (tileIdx === 4) {
+            // Water tile - blue with animated wave
+            ctx.fillStyle = '#1d4ed8';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            // Animated wave highlights
+            const waveOffset = Math.sin(timeRef.current * 2 + x * 0.5 + y * 0.3) * 3;
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.35)';
+            ctx.fillRect(tx + 4 + waveOffset, ty + 12, 24, 3);
+            ctx.fillRect(tx + 20 - waveOffset, ty + 32, 30, 3);
+            ctx.fillRect(tx + 8 + waveOffset, ty + 50, 20, 3);
+            // Bright sparkle
+            ctx.fillStyle = 'rgba(147, 197, 253, 0.5)';
+            ctx.beginPath();
+            ctx.arc(
+              tx + TILE_SIZE / 2 + waveOffset,
+              ty + TILE_SIZE / 2,
+              6 + Math.sin(timeRef.current * 3) * 2,
+              0, Math.PI * 2
+            );
+            ctx.fill();
+          } else if (tileIdx === 5) {
+            // Bush tile - green with clustered circles
+            ctx.fillStyle = '#15803d';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#22c55e';
+            const bseed = x * 11 + y * 19;
+            for (let i = 0; i < 6; i++) {
+              const cx = tx + ((bseed + i * 13) % 48) + 8;
+              const cy = ty + ((bseed + i * 29) % 48) + 8;
               ctx.beginPath();
-              ctx.arc(
-                x * TILE_SIZE + TILE_SIZE / 2 + waveOffset,
-                y * TILE_SIZE + TILE_SIZE / 2,
-                8 + Math.sin(timeRef.current * 3) * 2,
-                0, Math.PI * 2
-              );
+              ctx.arc(cx, cy, 8 + (i % 3) * 2, 0, Math.PI * 2);
               ctx.fill();
             }
+            ctx.fillStyle = '#14532d';
+            for (let i = 0; i < 4; i++) {
+              ctx.fillRect(tx + ((bseed + i * 7) % 56) + 4, ty + ((bseed + i * 11) % 56) + 4, 4, 4);
+            }
+          } else if (tileIdx === 6) {
+            // Stone tile - gray with cracks
+            ctx.fillStyle = '#78716c';
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#57534e';
+            ctx.beginPath();
+            ctx.moveTo(tx, ty + 32);
+            ctx.lineTo(tx + 20, ty);
+            ctx.lineTo(tx + TILE_SIZE, ty);
+            ctx.lineTo(tx + TILE_SIZE, ty + 32);
+            ctx.lineTo(tx + 44, ty + TILE_SIZE);
+            ctx.lineTo(tx, ty + TILE_SIZE);
+            ctx.fill();
+            ctx.strokeStyle = '#44403c';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(tx + 30, ty);
+            ctx.lineTo(tx + 35, ty + 30);
+            ctx.lineTo(tx + 25, ty + TILE_SIZE);
+            ctx.stroke();
           }
         }
       }
     } else {
-      const pattern = ctx.createPattern(assets.floor, 'repeat');
-      if (pattern) {
-        ctx.fillStyle = pattern;
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      // Fallback: solid floor fill
+      ctx.fillStyle = '#27272a';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      // Grid lines
+      ctx.strokeStyle = '#18181b';
+      ctx.lineWidth = 1;
+      for (let gx = 0; gx < CANVAS_WIDTH; gx += TILE_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, CANVAS_HEIGHT);
+        ctx.stroke();
+      }
+      for (let gy = 0; gy < CANVAS_HEIGHT; gy += TILE_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(CANVAS_WIDTH, gy);
+        ctx.stroke();
       }
     }
 
-    // Draw Obstacles
+    // Draw Obstacles - vector style
     if (state.obstacles) {
       state.obstacles.forEach((obs: Obstacle) => {
         if (obs.destroyed) return;
@@ -347,20 +427,77 @@ const GameCanvas: React.FC = () => {
         ctx.save();
         ctx.translate(obs.pos.x, obs.pos.y);
 
-        const obsSize = obs.radius * 2.5;
+        const r = obs.radius;
         if (obs.obstacleType === 'tree') {
-          ctx.drawImage(assets.tree, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+          // Trunk - brown rect
+          ctx.fillStyle = '#92400e';
+          ctx.fillRect(-r * 0.2, -r * 0.1, r * 0.4, r * 1.2);
+          ctx.fillStyle = '#a16207';
+          ctx.fillRect(-r * 0.1, -r * 0.1, r * 0.15, r * 1.2);
+          // Foliage - overlapping green circles
+          ctx.fillStyle = '#15803d';
+          ctx.beginPath();
+          ctx.arc(-r * 0.4, -r * 0.5, r * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(r * 0.4, -r * 0.5, r * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(0, -r * 0.7, r * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+          // Highlight
+          ctx.fillStyle = '#4ade80';
+          ctx.beginPath();
+          ctx.arc(-r * 0.15, -r * 0.85, r * 0.25, 0, Math.PI * 2);
+          ctx.fill();
         } else if (obs.obstacleType === 'rock') {
-          ctx.drawImage(assets.rock, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+          // Large gray circle with shadow and highlight
+          ctx.fillStyle = '#44403c';
+          ctx.beginPath();
+          ctx.arc(2, 2, r * 0.9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#78716c';
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.85, 0, Math.PI * 2);
+          ctx.fill();
+          // Smaller bump
+          ctx.fillStyle = '#57534e';
+          ctx.beginPath();
+          ctx.arc(-r * 0.3, -r * 0.15, r * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+          // Highlight
+          ctx.fillStyle = '#a8a29e';
+          ctx.beginPath();
+          ctx.arc(-r * 0.2, -r * 0.3, r * 0.2, 0, Math.PI * 2);
+          ctx.fill();
         } else if (obs.obstacleType === 'bush') {
-          ctx.drawImage(assets.bush, -obsSize / 2, -obsSize / 2, obsSize, obsSize);
+          // Several overlapping green circles
+          ctx.fillStyle = '#14532d';
+          ctx.beginPath();
+          ctx.arc(-r * 0.3, r * 0.1, r * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(r * 0.3, r * 0.1, r * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#15803d';
+          ctx.beginPath();
+          ctx.arc(0, -r * 0.15, r * 0.65, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(-r * 0.15, -r * 0.25, r * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(r * 0.2, -r * 0.1, r * 0.3, 0, Math.PI * 2);
+          ctx.fill();
         }
 
         ctx.restore();
       });
     }
 
-    // Draw Bombs
+    // Draw Bombs - vector style (like bomb pickup)
     if (state.bombs) {
       state.bombs.forEach((bomb: Bomb) => {
         ctx.save();
@@ -370,15 +507,47 @@ const GameCanvas: React.FC = () => {
         const pulse = 1 + Math.sin(timeRef.current * 10) * 0.1 * (1 - bomb.fuseTimer / 2);
         ctx.scale(pulse, pulse);
 
-        // Draw bomb sprite - bigger and pink
-        const bombSize = 60;
-        ctx.drawImage(assets.bomb, -bombSize / 2, -bombSize / 2, bombSize, bombSize);
-
-        // Draw fuse spark
-        ctx.fillStyle = '#fbbf24';
+        // Bomb body (dark circle)
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = '#1f2937';
         ctx.beginPath();
-        ctx.arc(0, -25, 4 + Math.random() * 2, 0, Math.PI * 2);
+        ctx.arc(0, 0, 25, 0, Math.PI * 2);
         ctx.fill();
+
+        // Bomb outline
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Highlight reflection
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.beginPath();
+        ctx.arc(-8, -8, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Fuse line
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(15, -15);
+        ctx.lineTo(25, -28);
+        ctx.stroke();
+
+        // Fuse spark (flickering)
+        const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+        ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
+        ctx.shadowColor = '#ff6b00';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(25, -28, 5 + Math.random() * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(25, -28, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
 
         // Draw danger radius indicator when close to exploding
         if (bomb.fuseTimer < 1) {
@@ -528,18 +697,25 @@ const GameCanvas: React.FC = () => {
       ctx.arc(0, 0, 50, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw sword sprite if available
-      if (assets.sword) {
-        ctx.rotate(Math.PI / 4); // Angle it
-        ctx.drawImage(assets.sword, -40, -40, 80, 80);
-      } else {
-        // Fallback sword shape
-        ctx.fillStyle = '#e5e7eb';
-        ctx.fillRect(-5, -35, 10, 70); // Blade
-        ctx.fillRect(-15, 25, 30, 8); // Guard
-        ctx.fillStyle = '#a78bfa';
-        ctx.fillRect(-4, 30, 8, 15); // Handle
-      }
+      // Sword shape - vector only
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(-5, -35, 10, 70); // Blade
+      ctx.strokeStyle = '#a1a1aa';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-5, -35, 10, 70);
+      // Blade highlight
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2, -33, 4, 60);
+      // Guard
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(-15, 25, 30, 8);
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-15, 25, 30, 8);
+      // Handle
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(-4, 33, 8, 15);
 
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -624,15 +800,15 @@ const GameCanvas: React.FC = () => {
       ctx.shadowColor = '#e5e7eb';
       ctx.shadowBlur = 20;
 
-      // Draw sword sprite if available
-      if (assets.sword) {
-        ctx.drawImage(assets.sword, -35, -35, 70, 70);
-      } else {
-        // Fallback sword shape
-        ctx.fillStyle = '#e5e7eb';
-        ctx.fillRect(-4, -30, 8, 60); // Blade
-        ctx.fillRect(-12, 20, 24, 6); // Guard
-      }
+      // Sword shape - vector only
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(-4, -30, 8, 60); // Blade
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2, -28, 4, 50); // Blade highlight
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(-12, 20, 24, 6); // Guard
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(-3, 26, 6, 10); // Handle
 
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -670,11 +846,47 @@ const GameCanvas: React.FC = () => {
         ctx.globalAlpha = 1;
       }
 
-      const pSize = p.radius * 2.5;
+      // Player body - vector style (circle body + facing indicator)
+      const bodyColor = isMe ? '#3b82f6' : '#ef4444';
+      const bodyDark = isMe ? '#1d4ed8' : '#b91c1c';
+      const bodyLight = isMe ? '#60a5fa' : '#f87171';
 
-      // Use different sprites for players
-      const playerSprite = isMe ? assets.player : assets.playerEnemy;
-      ctx.drawImage(playerSprite, -pSize / 2, -pSize / 2, pSize, pSize);
+      // Soft ground glow
+      ctx.shadowColor = bodyColor;
+      ctx.shadowBlur = 18;
+
+      // Main body circle
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner darker circle (armor/visor feel)
+      ctx.fillStyle = bodyDark;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Visor slit
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-p.radius * 0.5, -p.radius * 0.15, p.radius, p.radius * 0.3);
+
+      // Highlight
+      ctx.fillStyle = bodyLight;
+      ctx.beginPath();
+      ctx.arc(-p.radius * 0.25, -p.radius * 0.35, p.radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Facing direction indicator (small triangle pointing forward)
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(p.radius + 6, 0);
+      ctx.lineTo(p.radius - 2, -5);
+      ctx.lineTo(p.radius - 2, 5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
 
       // Calculate swing animation based on player velocity
       const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
@@ -713,11 +925,18 @@ const GameCanvas: React.FC = () => {
           ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
           ctx.stroke();
           ctx.globalAlpha = 1;
-          ctx.drawImage(assets.sword, 0, -52, 104, 104);
         } else {
           ctx.rotate(Math.PI / 4 + itemSwing);
-          ctx.drawImage(assets.sword, 0, -52, 104, 104);
         }
+        // Vector sword in hand
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(-4, -45, 8, 70); // Blade
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-2, -43, 4, 60); // Blade highlight
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(-12, 18, 24, 6); // Guard
+        ctx.fillStyle = '#52525b';
+        ctx.fillRect(-3, 24, 6, 12); // Handle
         ctx.restore();
 
         // Additional swing arc (drawn in player-translated space, outside sword save/restore)
@@ -1181,11 +1400,15 @@ const GameCanvas: React.FC = () => {
             </>
           )}
 
-          {isHost && (
-            <button onClick={resetGame} className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded flex items-center gap-2">
-              RESET ROUND
-            </button>
-          )}
+          <button
+            onClick={() => {
+              partyClientRef.current?.disconnect();
+              setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
+            }}
+            className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded flex items-center gap-2"
+          >
+            BACK TO MENU
+          </button>
         </div>
       )}
     </div>
