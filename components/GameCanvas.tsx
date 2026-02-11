@@ -1,22 +1,21 @@
+'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS } from '../constants';
 import { GameState, PlayerInput, Bomb, Obstacle } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
-// Asset generator no longer needed - all rendering is vector-based
 import { Trophy, Users, Copy, Play, Shield, Sword, User, Bomb as BombIcon } from 'lucide-react';
 import WalletConnect from './WalletConnect';
 import BetSelector from './BetSelector';
-import { checkConnection, getCurrentAddress, MIN_BET, MAX_BET } from '../utils/web3';
-import { createContractRoom, joinRoom, finishGame, claimReward, getRoomBetAmount } from '../utils/contract';
-import { ethers } from 'ethers';
+import { useAccount } from 'wagmi';
+import { formatEther } from 'viem';
+import { useDuelArena, MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
 import { PartyClient, generateRoomId } from '../utils/partyClient';
 
 const GameCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | null>(null);
   const stateRef = useRef<GameState>(createInitialState());
-  // Assets no longer used for in-world rendering (all vector now)
 
   // Inputs
   const keysRef = useRef<Set<string>>(new Set());
@@ -46,11 +45,12 @@ const GameCanvas: React.FC = () => {
   });
 
   const [inputRoomId, setInputRoomId] = useState('');
-  const [canvasSize, setCanvasSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [canvasSize, setCanvasSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 800, height: typeof window !== 'undefined' ? window.innerHeight : 600 });
 
-  // Web3 State
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  // Wagmi wallet state
+  const { address: walletAddress, isConnected: walletConnected } = useAccount();
+  const { createRoom: contractCreateRoom, joinRoom: contractJoinRoom, finishGame: contractFinishGame, claimReward: contractClaimReward, isWriting } = useDuelArena();
+
   const [selectedBet, setSelectedBet] = useState<bigint | null>(null);
   const [roomContractId, setRoomContractId] = useState<number | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
@@ -105,34 +105,21 @@ const GameCanvas: React.FC = () => {
     };
   }, []);
 
-  // Check wallet connection on mount
+  // Show connect modal if not connected
   useEffect(() => {
-    const checkAndPrompt = async () => {
-      const connected = await checkConnection();
-      if (connected) {
-        const addr = await getCurrentAddress();
-        if (addr) {
-          setWalletConnected(true);
-          setWalletAddress(addr);
-        }
-      } else {
-        setTimeout(() => {
-          setShowConnectModal(true);
-        }, 500);
-      }
-    };
-    checkAndPrompt();
-  }, []);
+    if (!walletConnected) {
+      const timer = setTimeout(() => setShowConnectModal(true), 500);
+      return () => clearTimeout(timer);
+    }
+    setShowConnectModal(false);
+  }, [walletConnected]);
 
-  const handleWalletConnect = (address: string) => {
-    setWalletConnected(true);
-    setWalletAddress(address);
+  const handleWalletConnect = (_address: string) => {
     setShowConnectModal(false);
   };
 
   const handleWalletDisconnect = () => {
-    setWalletConnected(false);
-    setWalletAddress(null);
+    // wagmi handles state automatically
   };
 
   const createRoomWithBet = async () => {
@@ -144,9 +131,10 @@ const GameCanvas: React.FC = () => {
     setIsCreatingRoom(true);
     try {
       if (walletConnected) {
-        const contractRoomId = await createContractRoom(selectedBet);
-        if (contractRoomId !== null) {
-          setRoomContractId(contractRoomId);
+        const txHash = await contractCreateRoom(selectedBet);
+        if (txHash) {
+          // Contract room created on-chain
+          console.log('Room created on-chain, tx:', txHash);
         }
       }
       setRoomBetAmount(selectedBet);
@@ -170,20 +158,14 @@ const GameCanvas: React.FC = () => {
 
     setIsJoiningRoom(true);
     try {
-      let betAmount = roomBetAmount;
-      if (!betAmount) {
-        const contractBetAmount = await getRoomBetAmount(parseInt(inputRoomId));
-        if (contractBetAmount !== null) {
-          betAmount = contractBetAmount;
-          setRoomBetAmount(betAmount);
-        } else {
-          betAmount = selectedBet || MIN_BET;
-          setRoomBetAmount(betAmount);
-        }
-      }
+      const betAmount = selectedBet || MIN_BET;
+      setRoomBetAmount(betAmount);
 
-      if (betAmount && walletConnected) {
-        await joinRoom(parseInt(inputRoomId), betAmount);
+      if (walletConnected) {
+        const txHash = await contractJoinRoom(0, betAmount);
+        if (txHash) {
+          console.log('Joined room on-chain, tx:', txHash);
+        }
       }
 
       setRoomId(inputRoomId);
@@ -1170,8 +1152,8 @@ const GameCanvas: React.FC = () => {
     if (stateRef.current.status === 'VICTORY' && stateRef.current.winnerId && roomContractId !== null && !gameFinished) {
       setGameFinished(true);
       if (walletAddress && stateRef.current.winnerId === playerIdRef.current) {
-        finishGame(roomContractId, walletAddress).then((success) => {
-          if (!success) {
+        contractFinishGame(roomContractId, walletAddress as `0x${string}`).then((txHash) => {
+          if (!txHash) {
             console.warn('Failed to finish game in contract');
           }
         }).catch((err) => {
@@ -1363,15 +1345,15 @@ const GameCanvas: React.FC = () => {
               <p className="text-gray-400 mb-4">You are the champion</p>
               {roomContractId !== null && roomBetAmount && (
                 <div className="mb-6 p-4 bg-zinc-800/50 border border-zinc-600 rounded">
-                  <p className="text-sm text-gray-300 mb-2">Reward: <span className="font-bold text-green-400">{ethers.formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * 5n / 100n))} ETH</span></p>
+                  <p className="text-sm text-gray-300 mb-2">Reward: <span className="font-bold text-green-400">{formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span></p>
                   {roomContractId !== null && (
                     <button
                       onClick={async () => {
                         if (roomContractId === null) return;
                         setClaimingReward(true);
                         try {
-                          const success = await claimReward(roomContractId);
-                          if (success) {
+                          const txHash = await contractClaimReward(roomContractId);
+                          if (txHash) {
                             alert('Reward claimed successfully!');
                           } else {
                             alert('Contract not available. Reward cannot be claimed.');

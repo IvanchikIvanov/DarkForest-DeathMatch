@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useState } from 'react';
-import { MIN_BET, MAX_BET } from '../utils/web3';
-import { ethers } from 'ethers';
+import { formatEther } from 'viem';
+import { MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
 
 interface BetSelectorProps {
   onSelect: (betAmount: bigint) => void;
@@ -17,10 +19,6 @@ const BetSelector: React.FC<BetSelectorProps> = ({ onSelect, disabled = false, s
     onSelect(betAmount);
   };
 
-  const formatEth = (wei: bigint) => {
-    return ethers.formatEther(wei);
-  };
-
   return (
     <div className="flex flex-col gap-3">
       <p className="text-white text-sm font-bold">Select Bet Amount:</p>
@@ -34,7 +32,7 @@ const BetSelector: React.FC<BetSelectorProps> = ({ onSelect, disabled = false, s
               : 'bg-zinc-800 border-zinc-600 text-gray-300 hover:border-zinc-500'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <div className="font-bold text-lg">{formatEth(MIN_BET)} ETH</div>
+          <div className="font-bold text-lg">{formatEther(MIN_BET)} ETH</div>
           <div className="text-xs mt-1">Low Stake</div>
         </button>
         <button
@@ -46,15 +44,15 @@ const BetSelector: React.FC<BetSelectorProps> = ({ onSelect, disabled = false, s
               : 'bg-zinc-800 border-zinc-600 text-gray-300 hover:border-zinc-500'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <div className="font-bold text-lg">{formatEth(MAX_BET)} ETH</div>
+          <div className="font-bold text-lg">{formatEther(MAX_BET)} ETH</div>
           <div className="text-xs mt-1">High Stake</div>
         </button>
       </div>
       {selected && (
         <div className="bg-zinc-800/50 border border-zinc-600 rounded p-2 text-xs text-gray-300">
-          <p>Selected: <span className="font-bold text-white">{formatEth(selected)} ETH</span></p>
-          <p className="mt-1">Winner receives: <span className="font-bold text-green-400">{formatEth(selected * 2n - (selected * 2n * 5n / 100n))} ETH</span> (95%)</p>
-          <p>Platform fee: <span className="font-bold text-yellow-400">{formatEth(selected * 2n * 5n / 100n)} ETH</span> (5%)</p>
+          <p>Selected: <span className="font-bold text-white">{formatEther(selected)} ETH</span></p>
+          <p className="mt-1">Winner receives: <span className="font-bold text-green-400">{formatEther(selected * 2n - (selected * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span> (95%)</p>
+          <p>Platform fee: <span className="font-bold text-yellow-400">{formatEther(selected * 2n * TREASURY_FEE_PERCENT / 100n)} ETH</span> (5%)</p>
         </div>
       )}
     </div>
@@ -62,4 +60,3 @@ const BetSelector: React.FC<BetSelectorProps> = ({ onSelect, disabled = false, s
 };
 
 export default BetSelector;
-

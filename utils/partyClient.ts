@@ -11,8 +11,10 @@ const getPartyKitHost = (): string => {
     return host;
   }
   
-  // Check Vite env variable
-  const envHost = import.meta.env.VITE_PARTYKIT_HOST;
+  // Check env variable (supports both Vite and Next.js)
+  const envHost = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PARTYKIT_HOST
+    ? process.env.NEXT_PUBLIC_PARTYKIT_HOST
+    : (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PARTYKIT_HOST) || '';
   if (envHost && envHost.trim() !== '' && envHost !== 'localhost:1999') {
     console.log('[PartyClient] Using PartyKit host from env:', envHost);
     return envHost.trim();

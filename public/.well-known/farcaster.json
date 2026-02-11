@@ -1,0 +1,23 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "frame": {
+    "version": "1",
+    "name": "DarkForest Arena",
+    "subtitle": "Multiplayer Battle Arena",
+    "description": "Fight in the arena, bid ETH, winner takes all. Real-time multiplayer combat on Base.",
+    "iconUrl": "",
+    "homeUrl": "",
+    "splashImageUrl": "",
+    "splashBackgroundColor": "#1a1a1a",
+    "primaryCategory": "games",
+    "tags": ["game", "arena", "battle", "pvp", "betting"],
+    "heroImageUrl": "",
+    "ogTitle": "DarkForest Arena - Fight & Earn on Base",
+    "ogDescription": "Real-time multiplayer arena combat. Bid ETH, fight, winner takes the pool.",
+    "ogImageUrl": ""
+  }
+}

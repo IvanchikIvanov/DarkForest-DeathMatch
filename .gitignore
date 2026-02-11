@@ -12,6 +12,8 @@ typechain-types/
 # Build output
 dist/
 build/
+.next/
+.env.local
 
 # PartyKit local state
 .partykit/state/
