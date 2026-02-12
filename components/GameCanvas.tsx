@@ -1414,28 +1414,6 @@ const GameCanvas: React.FC = () => {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    // DEBUG overlay - ALWAYS visible - V2
-    {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#00ff00';
-      ctx.font = 'bold 18px monospace';
-      ctx.textAlign = 'left';
-      ctx.shadowColor = '#000';
-      ctx.shadowBlur = 6;
-      const dbgHp = state.healthPickups || [];
-      const dbgGp = state.gunPickups || [];
-      const dbgSp = (state as any).swordPickups || [];
-      const dbgBp = (state as any).bombPickups || [];
-      const dbgPlayers = Object.values(state.players);
-      ctx.fillText(`[V2] ${state.status} | HP:${dbgHp.length} Gun:${dbgGp.length} Sword:${dbgSp.length} Bomb:${dbgBp.length}`, 10, 25);
-      dbgPlayers.forEach((pl: any, i: number) => {
-        ctx.fillText(`P${i}: gun=${pl.hasGun} sword=${pl.hasSword} bomb=${pl.hasBomb}`, 10, 50 + i * 24);
-      });
-      ctx.shadowBlur = 0;
-      ctx.restore();
-    }
-
     // Custom cursor
     if (state.status === 'PLAYING') {
       ctx.save();
