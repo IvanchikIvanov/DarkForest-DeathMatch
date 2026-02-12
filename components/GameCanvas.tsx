@@ -27,6 +27,11 @@ const GameCanvas: React.FC = () => {
   // Animation time for water effects
   const timeRef = useRef<number>(0);
 
+  // Camera — follows player with smooth lerp
+  const cameraRef = useRef<{ x: number, y: number }>({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 });
+  const CAMERA_ZOOM = 2.8; // How much to zoom in (higher = closer)
+  const CAMERA_LERP = 0.08; // Smoothing (0-1, lower = smoother)
+
   // PartyKit client
   const partyClientRef = useRef<PartyClient | null>(null);
   const lobbyClientRef = useRef<LobbyClient | null>(null);
@@ -252,20 +257,25 @@ const GameCanvas: React.FC = () => {
     if (rect) {
       const canvasWidth = canvasRef.current?.width || 800;
       const canvasHeight = canvasRef.current?.height || 600;
-      const scaleX = canvasWidth / CANVAS_WIDTH;
-      const scaleY = canvasHeight / CANVAS_HEIGHT;
-      const scale = Math.min(scaleX, scaleY);
-      const scaledWidth = CANVAS_WIDTH * scale;
-      const scaledHeight = CANVAS_HEIGHT * scale;
-      const offsetX = (canvasWidth - scaledWidth) / 2;
-      const offsetY = (canvasHeight - scaledHeight) / 2;
 
-      const screenX = (e.clientX - rect.left) - offsetX;
-      const screenY = (e.clientY - rect.top) - offsetY;
+      // During PLAYING, use camera-aware coordinates
+      const baseScale = Math.min(canvasWidth / CANVAS_WIDTH, canvasHeight / CANVAS_HEIGHT);
+      const zoom = stateRef.current.status === 'PLAYING' ? CAMERA_ZOOM : 1;
+      const totalScale = baseScale * zoom;
+
+      const cam = cameraRef.current;
+      // Visible area in world coords
+      const viewW = canvasWidth / totalScale;
+      const viewH = canvasHeight / totalScale;
+      const viewLeft = cam.x - viewW / 2;
+      const viewTop = cam.y - viewH / 2;
+
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
 
       mouseRef.current = {
-        x: screenX / scale,
-        y: screenY / scale
+        x: viewLeft + screenX / totalScale,
+        y: viewTop + screenY / totalScale
       };
     }
   }, []);
@@ -298,14 +308,39 @@ const GameCanvas: React.FC = () => {
 
     timeRef.current += 0.016;
 
-    const scaleX = canvasWidth / CANVAS_WIDTH;
-    const scaleY = canvasHeight / CANVAS_HEIGHT;
-    const scale = Math.min(scaleX, scaleY);
+    const baseScaleX = canvasWidth / CANVAS_WIDTH;
+    const baseScaleY = canvasHeight / CANVAS_HEIGHT;
+    const baseScale = Math.min(baseScaleX, baseScaleY);
 
-    const scaledWidth = CANVAS_WIDTH * scale;
-    const scaledHeight = CANVAS_HEIGHT * scale;
-    const offsetX = (canvasWidth - scaledWidth) / 2;
-    const offsetY = (canvasHeight - scaledHeight) / 2;
+    // Camera follows player during gameplay
+    const isPlaying = state.status === 'PLAYING' || state.status === 'VICTORY';
+    const zoom = isPlaying ? CAMERA_ZOOM : 1;
+    const scale = baseScale * zoom;
+
+    // Update camera position — smooth follow player
+    if (isPlaying && playerIdRef.current) {
+      const me = state.players[playerIdRef.current];
+      if (me && me.active) {
+        cameraRef.current.x += (me.pos.x - cameraRef.current.x) * CAMERA_LERP;
+        cameraRef.current.y += (me.pos.y - cameraRef.current.y) * CAMERA_LERP;
+      }
+    } else {
+      // Menu/lobby: center on map
+      cameraRef.current.x = CANVAS_WIDTH / 2;
+      cameraRef.current.y = CANVAS_HEIGHT / 2;
+    }
+
+    // Clamp camera so we don't see outside the map
+    const viewW = canvasWidth / scale;
+    const viewH = canvasHeight / scale;
+    cameraRef.current.x = Math.max(viewW / 2, Math.min(CANVAS_WIDTH - viewW / 2, cameraRef.current.x));
+    cameraRef.current.y = Math.max(viewH / 2, Math.min(CANVAS_HEIGHT - viewH / 2, cameraRef.current.y));
+
+    const cam = cameraRef.current;
+
+    // Calculate where to draw — camera-centered
+    const offsetX = canvasWidth / 2 - cam.x * scale;
+    const offsetY = canvasHeight / 2 - cam.y * scale;
 
     const shakeX = (Math.random() - 0.5) * state.shake * scale;
     const shakeY = (Math.random() - 0.5) * state.shake * scale;
@@ -1405,25 +1440,34 @@ const GameCanvas: React.FC = () => {
     if (state.status === 'PLAYING') {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const mx = offsetX + mouseRef.current.x * scale;
-      const my = offsetY + mouseRef.current.y * scale;
+      // Convert world mouse pos back to screen pos
+      const mx = (mouseRef.current.x - cam.x) * scale + canvasWidth / 2;
+      const my = (mouseRef.current.y - cam.y) * scale + canvasHeight / 2;
 
-      // Crosshair cursor
-      ctx.strokeStyle = '#ef4444';
+      // Crosshair cursor — neon styled
+      ctx.strokeStyle = '#ff1744';
+      ctx.shadowColor = '#ff1744';
+      ctx.shadowBlur = 6;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(mx, my, 8, 0, Math.PI * 2);
+      ctx.arc(mx, my, 10, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(mx - 12, my);
-      ctx.lineTo(mx - 4, my);
-      ctx.moveTo(mx + 4, my);
-      ctx.lineTo(mx + 12, my);
-      ctx.moveTo(mx, my - 12);
-      ctx.lineTo(mx, my - 4);
-      ctx.moveTo(mx, my + 4);
-      ctx.lineTo(mx, my + 12);
+      ctx.moveTo(mx - 16, my);
+      ctx.lineTo(mx - 5, my);
+      ctx.moveTo(mx + 5, my);
+      ctx.lineTo(mx + 16, my);
+      ctx.moveTo(mx, my - 16);
+      ctx.lineTo(mx, my - 5);
+      ctx.moveTo(mx, my + 5);
+      ctx.lineTo(mx, my + 16);
       ctx.stroke();
+      // Center dot
+      ctx.fillStyle = '#fff';
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(mx, my, 2, 0, Math.PI * 2);
+      ctx.fill();
 
       ctx.restore();
     }
