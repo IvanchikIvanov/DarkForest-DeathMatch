@@ -843,229 +843,482 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Players
+    // Draw Players — Detailed Cyber Warriors
     Object.values(state.players).forEach(p => {
       if (!p.active) return;
       const isMe = p.playerId === playerIdRef.current;
+      const r = p.radius; // 20
 
-      // Weapon - Sword, Gun, or Bomb (one at a time)
       const hasGun = (p as any).hasGun;
       const hasSword = (p as any).hasSword;
       const hasBomb = (p as any).hasBomb;
 
-      // Draw player body (rotated)
+      // Animation calculations
+      const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
+      const isMoving = velMag > 15;
+      const walkCycle = timeRef.current * 10; // leg/arm animation speed
+      const breathe = Math.sin(timeRef.current * 2) * 0.8; // idle breathing
+      const bobY = isMoving ? Math.sin(walkCycle) * 2.5 : breathe; // body bob
+      const legSwing = isMoving ? Math.sin(walkCycle) * 0.55 : 0; // leg swing angle
+      const armSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.4 : Math.sin(timeRef.current * 1.5) * 0.08;
+
+      // Color palette
+      const primary = isMe ? '#0ff' : '#ff1744';
+      const primaryDark = isMe ? '#0088aa' : '#aa0022';
+      const primaryGlow = isMe ? 'rgba(0,255,255,' : 'rgba(255,23,68,';
+      const armorBase = isMe ? '#1a3a4a' : '#3a1a1a';
+      const armorMid = isMe ? '#0d2833' : '#2d0d0d';
+      const armorLight = isMe ? '#2a5a6a' : '#5a2a2a';
+      const eyeColor = isMe ? '#0ff' : '#ff1744';
+      const capeColor = isMe ? '#0088aa' : '#8b0000';
+      const capeTip = isMe ? '#00cccc' : '#cc0022';
+
       ctx.save();
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate(p.angle || 0);
 
-      // Player outline for better visibility
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
+      // === GROUND SHADOW ===
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath();
-      ctx.arc(0, 0, p.radius + 2, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.ellipse(0, r + 8, r * 1.2, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      // Dodge effect
+      // === DODGE EFFECT — afterimage ===
       if (p.isDodging) {
-        ctx.globalAlpha = 0.6;
-        ctx.fillStyle = COLORS.playerDodge;
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = primary;
         ctx.beginPath();
-        ctx.arc(0, 0, p.radius + 5, 0, Math.PI * 2);
+        ctx.arc(-15, 0, r * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-30, 0, r * 0.6, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
 
-      // Player body - vector style (circle body + facing indicator)
-      const bodyColor = isMe ? '#3b82f6' : '#ef4444';
-      const bodyDark = isMe ? '#1d4ed8' : '#b91c1c';
-      const bodyLight = isMe ? '#60a5fa' : '#f87171';
+      // Apply body bob
+      ctx.translate(0, bobY);
 
-      // Soft ground glow
-      ctx.shadowColor = bodyColor;
-      ctx.shadowBlur = 18;
-
-      // Main body circle
-      ctx.fillStyle = bodyColor;
+      // === CAPE / CLOAK (behind body) ===
+      ctx.save();
+      const capeWave = Math.sin(timeRef.current * 3 + 1) * 0.15;
+      const capeFlutter = isMoving ? Math.sin(walkCycle * 0.7) * 0.2 : capeWave;
+      ctx.rotate(Math.PI + capeFlutter);
       ctx.beginPath();
-      ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+      ctx.moveTo(-8, 0);
+      ctx.quadraticCurveTo(-12, 18 + Math.sin(timeRef.current * 4) * 3, -6, 32);
+      ctx.quadraticCurveTo(0, 36 + Math.sin(timeRef.current * 3.5) * 2, 6, 32);
+      ctx.quadraticCurveTo(12, 18 + Math.sin(timeRef.current * 4.5) * 3, 8, 0);
+      ctx.closePath();
+      ctx.fillStyle = capeColor;
       ctx.fill();
+      // Cape edge highlight
+      ctx.strokeStyle = capeTip;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
 
-      // Inner darker circle (armor/visor feel)
-      ctx.fillStyle = bodyDark;
+      // === LEGS (behind body) ===
+      // Left leg
+      ctx.save();
+      ctx.translate(-6, r * 0.4);
+      ctx.rotate(legSwing);
+      // Thigh
+      ctx.fillStyle = armorMid;
+      ctx.fillRect(-4, 0, 8, 14);
+      // Knee joint
+      ctx.fillStyle = primary;
+      ctx.fillRect(-2, 12, 4, 3);
+      // Shin
+      ctx.fillStyle = armorBase;
+      ctx.fillRect(-3, 14, 7, 12);
+      // Boot
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-4, 24, 10, 5);
+      ctx.fillStyle = primary;
+      ctx.fillRect(-4, 24, 10, 2); // Glowing boot trim
+      ctx.restore();
+
+      // Right leg
+      ctx.save();
+      ctx.translate(6, r * 0.4);
+      ctx.rotate(-legSwing);
+      ctx.fillStyle = armorMid;
+      ctx.fillRect(-4, 0, 8, 14);
+      ctx.fillStyle = primary;
+      ctx.fillRect(-2, 12, 4, 3);
+      ctx.fillStyle = armorBase;
+      ctx.fillRect(-3, 14, 7, 12);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-4, 24, 10, 5);
+      ctx.fillStyle = primary;
+      ctx.fillRect(-4, 24, 10, 2);
+      ctx.restore();
+
+      // === BODY / TORSO (armor) ===
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 12;
+
+      // Torso - armored chest plate
+      ctx.fillStyle = armorBase;
       ctx.beginPath();
-      ctx.arc(0, 0, p.radius * 0.65, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Visor slit
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(-p.radius * 0.5, -p.radius * 0.15, p.radius, p.radius * 0.3);
-
-      // Highlight
-      ctx.fillStyle = bodyLight;
-      ctx.beginPath();
-      ctx.arc(-p.radius * 0.25, -p.radius * 0.35, p.radius * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Facing direction indicator (small triangle pointing forward)
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(p.radius + 6, 0);
-      ctx.lineTo(p.radius - 2, -5);
-      ctx.lineTo(p.radius - 2, 5);
+      ctx.moveTo(-r * 0.7, -r * 0.3);
+      ctx.lineTo(-r * 0.8, r * 0.5);
+      ctx.lineTo(r * 0.8, r * 0.5);
+      ctx.lineTo(r * 0.7, -r * 0.3);
       ctx.closePath();
       ctx.fill();
 
+      // Chest plate center panel
+      ctx.fillStyle = armorMid;
+      ctx.fillRect(-6, -r * 0.2, 12, r * 0.6);
+
+      // Chest plate neon lines
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.6 + Math.sin(timeRef.current * 3) * 0.2;
+      // V-line on chest
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.25);
+      ctx.lineTo(-8, r * 0.15);
+      ctx.moveTo(0, -r * 0.25);
+      ctx.lineTo(8, r * 0.15);
+      ctx.stroke();
+      // Horizontal chest line
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.55, 0);
+      ctx.lineTo(r * 0.55, 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Belt
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-r * 0.7, r * 0.3, r * 1.4, 5);
+      ctx.fillStyle = primary;
+      ctx.fillRect(-3, r * 0.3, 6, 5); // Belt buckle glow
+
+      // Shoulder pads
+      ctx.fillStyle = armorLight;
+      // Left shoulder
+      ctx.beginPath();
+      ctx.arc(-r * 0.75, -r * 0.15, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Right shoulder
+      ctx.beginPath();
+      ctx.arc(r * 0.75, -r * 0.15, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.shadowBlur = 0;
 
-      // Calculate swing animation based on player velocity
-      const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
-      const swingAmount = Math.min(velMag / 500, 1) * 0.3;
-      const movingSwing = Math.sin(timeRef.current * 8) * swingAmount;
-      const idleSwing = Math.sin(timeRef.current * 2) * 0.1;
-      const itemSwing = velMag > 10 ? movingSwing : idleSwing;
+      // === LEFT ARM (non-weapon) ===
+      ctx.save();
+      ctx.translate(-r * 0.75, -r * 0.05);
+      ctx.rotate(armSwing);
+      ctx.fillStyle = armorMid;
+      ctx.fillRect(-4, 0, 8, 16);
+      // Forearm
+      ctx.fillStyle = armorBase;
+      ctx.fillRect(-3, 14, 7, 12);
+      // Glove
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-4, 24, 9, 5);
+      // Fist
+      ctx.fillStyle = armorMid;
+      ctx.beginPath();
+      ctx.arc(0, 30, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
 
-      // Only draw weapon if player has one
+      // === WEAPON ARM (right) ===
+      const itemSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.25 : Math.sin(timeRef.current * 1.5) * 0.06;
+
       if (hasGun) {
         ctx.save();
-        ctx.translate(25, 5);
-        ctx.rotate(itemSwing);
+        ctx.translate(r * 0.75, -r * 0.05);
+        ctx.rotate(itemSwing * 0.5);
+        // Arm
+        ctx.fillStyle = armorMid;
+        ctx.fillRect(-4, 0, 8, 16);
+        ctx.fillStyle = armorBase;
+        ctx.fillRect(-3, 14, 7, 10);
+        // Gun
+        ctx.save();
+        ctx.translate(0, 24);
+        ctx.rotate(-Math.PI / 2 + itemSwing);
         ctx.fillStyle = '#fbbf24';
         ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 10;
-        ctx.fillRect(0, -5, 35, 10);
-        ctx.fillRect(-5, -5, 12, 25);
+        ctx.shadowBlur = 8;
+        ctx.fillRect(0, -4, 30, 8);
+        ctx.fillRect(-4, -4, 10, 18);
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, -5, 35, 10);
-        ctx.strokeRect(-5, -5, 12, 25);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, -4, 30, 8);
+        // Muzzle flash hint
+        ctx.fillStyle = `rgba(251,191,36,${0.3 + Math.sin(timeRef.current * 12) * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(32, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
         ctx.shadowBlur = 0;
+        ctx.restore();
         ctx.restore();
       } else if (hasSword) {
         ctx.save();
-        ctx.translate(15, -10);
+        ctx.translate(r * 0.75, -r * 0.15);
+        // Arm
+        ctx.fillStyle = armorMid;
+        ctx.fillRect(-4, 0, 8, 14);
+        ctx.fillStyle = armorBase;
+        ctx.fillRect(-3, 12, 7, 10);
+        // Sword
+        ctx.save();
+        ctx.translate(0, 22);
         if (p.isAttacking) {
           const progress = 1 - (p.attackTimer / 0.2);
           const swingAngle = -Math.PI / 2 + (progress * Math.PI);
           ctx.rotate(swingAngle);
-          ctx.globalAlpha = 0.4;
+          // Swing trail
+          ctx.globalAlpha = 0.3;
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 8;
+          ctx.lineWidth = 6;
           ctx.beginPath();
-          ctx.arc(0, 0, 60, -Math.PI / 4, Math.PI / 4);
+          ctx.arc(0, 0, 50, -Math.PI / 3, Math.PI / 3);
           ctx.stroke();
           ctx.globalAlpha = 1;
         } else {
-          ctx.rotate(Math.PI / 4 + itemSwing);
+          ctx.rotate(-Math.PI / 4 + itemSwing);
         }
-        // Vector sword in hand
         ctx.fillStyle = '#e5e7eb';
-        ctx.fillRect(-4, -45, 8, 70); // Blade
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-2, -43, 4, 60); // Blade highlight
+        ctx.fillRect(-3, -40, 6, 60);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-1, -38, 2, 52);
         ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(-12, 18, 24, 6); // Guard
+        ctx.fillRect(-10, 14, 20, 5);
         ctx.fillStyle = '#52525b';
-        ctx.fillRect(-3, 24, 6, 12); // Handle
+        ctx.fillRect(-3, 19, 6, 10);
+        ctx.restore();
         ctx.restore();
 
-        // Additional swing arc (drawn in player-translated space, outside sword save/restore)
+        // Swing arc in player space
         if (p.isAttacking) {
-          ctx.beginPath();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-          ctx.lineWidth = 4;
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.lineWidth = 3;
           ctx.shadowColor = '#fff';
-          ctx.shadowBlur = 8;
-          ctx.arc(0, 0, 55, -Math.PI / 2, Math.PI / 3);
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.arc(0, 0, 50, -Math.PI / 2, Math.PI / 3);
           ctx.stroke();
           ctx.shadowBlur = 0;
         }
       } else if (hasBomb) {
         ctx.save();
-        ctx.translate(25, 5);
+        ctx.translate(r * 0.75, -r * 0.05);
         ctx.rotate(itemSwing);
+        ctx.fillStyle = armorMid;
+        ctx.fillRect(-4, 0, 8, 16);
+        ctx.fillStyle = armorBase;
+        ctx.fillRect(-3, 14, 7, 10);
+        // Bomb in hand
+        ctx.save();
+        ctx.translate(0, 28);
         ctx.fillStyle = '#1f2937';
         ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#374151';
         ctx.lineWidth = 2;
         ctx.stroke();
+        // Fuse
         ctx.strokeStyle = '#9ca3af';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(12, -10);
-        ctx.lineTo(18, -18);
+        ctx.moveTo(8, -6);
+        ctx.lineTo(14, -14);
         ctx.stroke();
-        const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
-        ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 8;
+        const sparkI = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+        ctx.fillStyle = `rgba(249,115,22,${sparkI})`;
         ctx.beginPath();
-        ctx.arc(18, -18, 4, 0, Math.PI * 2);
+        ctx.arc(14, -14, 3, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.restore();
+        ctx.restore();
+      } else {
+        // Unarmed right arm
+        ctx.save();
+        ctx.translate(r * 0.75, -r * 0.05);
+        ctx.rotate(-armSwing);
+        ctx.fillStyle = armorMid;
+        ctx.fillRect(-4, 0, 8, 16);
+        ctx.fillStyle = armorBase;
+        ctx.fillRect(-3, 14, 7, 12);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-4, 24, 9, 5);
+        ctx.fillStyle = armorMid;
+        ctx.beginPath();
+        ctx.arc(0, 30, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
-      // If no item, player is unarmed (no weapon drawn)
+
+      // === HEAD ===
+      ctx.save();
+      ctx.translate(0, -r * 0.6);
+
+      // Helmet base
+      ctx.fillStyle = armorBase;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Helmet top crest
+      ctx.fillStyle = armorLight;
+      ctx.beginPath();
+      ctx.moveTo(-2, -r * 0.65);
+      ctx.lineTo(0, -r * 0.9);
+      ctx.lineTo(2, -r * 0.65);
+      ctx.closePath();
+      ctx.fill();
+      // Crest glow
+      ctx.fillStyle = primary;
+      ctx.fillRect(-1, -r * 0.88, 2, 6);
+
+      // Visor area (dark slit)
+      ctx.fillStyle = '#0a0a0a';
+      const visorW = r * 0.9;
+      const visorH = r * 0.3;
+      ctx.fillRect(-visorW / 2, -visorH / 2 + 1, visorW, visorH);
+
+      // EYES — glowing dots in visor
+      const blinkCycle = Math.sin(timeRef.current * 0.5);
+      const isBlinking = blinkCycle > 0.97; // Blink every ~6 sec
+      const eyeScale = isBlinking ? 0.1 : 1;
+      const eyePulse = 0.8 + Math.sin(timeRef.current * 4) * 0.2;
+
+      if (!isBlinking) {
+        ctx.shadowColor = eyeColor;
+        ctx.shadowBlur = 10 * eyePulse;
+        ctx.fillStyle = eyeColor;
+        // Left eye
+        ctx.beginPath();
+        ctx.ellipse(-5, 1, 3 * eyeScale, 2.5 * eyeScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Right eye
+        ctx.beginPath();
+        ctx.ellipse(5, 1, 3 * eyeScale, 2.5 * eyeScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Eye glint
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-4, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(6, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      } else {
+        // Blinking — thin line
+        ctx.strokeStyle = eyeColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-7, 1);
+        ctx.lineTo(-3, 1);
+        ctx.moveTo(3, 1);
+        ctx.lineTo(7, 1);
+        ctx.stroke();
+      }
+
+      // Helmet chin guard
+      ctx.fillStyle = armorMid;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.5, visorH / 2 + 1);
+      ctx.lineTo(-r * 0.35, r * 0.45);
+      ctx.lineTo(r * 0.35, r * 0.45);
+      ctx.lineTo(r * 0.5, visorH / 2 + 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // Helmet side lines (decorative)
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.55, -r * 0.2);
+      ctx.lineTo(-r * 0.6, r * 0.1);
+      ctx.moveTo(r * 0.55, -r * 0.2);
+      ctx.lineTo(r * 0.6, r * 0.1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      ctx.restore(); // head
+
+      // === ENERGY CORE (chest glow) ===
+      const corePulse = 0.4 + Math.sin(timeRef.current * 3) * 0.3;
+      ctx.fillStyle = `${primaryGlow}${corePulse})`;
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.05, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
 
       ctx.restore(); // End player rotated transform
 
-      // UI elements drawn in world space (not rotated)
-      // Player name/ID
-      ctx.fillStyle = '#fff';
+      // === UI ELEMENTS (world space, not rotated) ===
+
+      // Player name
+      ctx.fillStyle = primary;
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000';
       ctx.shadowBlur = 4;
-      ctx.fillText(isMe ? 'YOU' : `P${p.playerId.slice(0, 4)}`, p.pos.x, p.pos.y - 35);
+      ctx.fillText(isMe ? 'YOU' : `P${p.playerId.slice(0, 4)}`, p.pos.x, p.pos.y - r * 2.5);
       ctx.shadowBlur = 0;
 
-      // HP Bar
+      // HP Bar — neon styled
       const hpPercent = (p.hp || 0) / (p.maxHp || 100);
-      const hpBarWidth = 44;
-      const hpBarHeight = 6;
+      const hpBarWidth = 50;
+      const hpBarHeight = 5;
+      const hpBarY = p.pos.y + r + 22;
 
-      ctx.fillStyle = '#1f1f1f';
-      ctx.fillRect(p.pos.x - hpBarWidth / 2 - 2, p.pos.y + 22, hpBarWidth + 4, hpBarHeight + 4);
+      // HP bar background
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(p.pos.x - hpBarWidth / 2 - 1, hpBarY - 1, hpBarWidth + 2, hpBarHeight + 2);
 
-      const hpGradient = ctx.createLinearGradient(p.pos.x - hpBarWidth / 2, 0, p.pos.x + hpBarWidth / 2, 0);
-      if (hpPercent > 0.5) {
-        hpGradient.addColorStop(0, '#22c55e');
-        hpGradient.addColorStop(1, '#4ade80');
-      } else if (hpPercent > 0.25) {
-        hpGradient.addColorStop(0, '#eab308');
-        hpGradient.addColorStop(1, '#facc15');
-      } else {
-        hpGradient.addColorStop(0, '#dc2626');
-        hpGradient.addColorStop(1, '#ef4444');
-      }
-      ctx.fillStyle = hpGradient;
-      ctx.fillRect(p.pos.x - hpBarWidth / 2, p.pos.y + 24, hpBarWidth * hpPercent, hpBarHeight);
+      // HP bar fill
+      const hpColor = hpPercent > 0.5 ? '#39ff14' : hpPercent > 0.25 ? '#ffd700' : '#ff1744';
+      const hpGlow = hpPercent > 0.5 ? 'rgba(57,255,20,0.4)' : hpPercent > 0.25 ? 'rgba(255,215,0,0.4)' : 'rgba(255,23,68,0.4)';
+      ctx.shadowColor = hpColor;
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = hpColor;
+      ctx.fillRect(p.pos.x - hpBarWidth / 2, hpBarY, hpBarWidth * hpPercent, hpBarHeight);
+      ctx.shadowBlur = 0;
 
-      ctx.strokeStyle = '#000';
+      // HP bar border
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(p.pos.x - hpBarWidth / 2 - 1, p.pos.y + 23, hpBarWidth + 2, hpBarHeight + 2);
+      ctx.strokeRect(p.pos.x - hpBarWidth / 2 - 1, hpBarY - 1, hpBarWidth + 2, hpBarHeight + 2);
 
-      // Dodge recovery bar
+      // Dodge cooldown bar (small, above name)
       const dodgeCooldown = p.cooldown || 0;
-      const dodgeBarWidth = 44;
-      const dodgeBarY = p.pos.y - 45;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
+      const dodgeBarWidth = 30;
+      const dodgeBarY = p.pos.y - r * 2.7;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 3);
       const dodgeReady = 1 - dodgeCooldown;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth * dodgeReady, 4);
-      ctx.strokeStyle = '#666';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth, 4);
+      ctx.fillStyle = `rgba(255,255,255,${dodgeReady > 0.99 ? 0.8 : 0.3})`;
+      ctx.fillRect(p.pos.x - dodgeBarWidth / 2, dodgeBarY, dodgeBarWidth * dodgeReady, 3);
 
-      // Bomb cooldown indicator
+      // Bomb cooldown
       const bombCooldown = (p as any).bombCooldown || 0;
       if (bombCooldown > 0) {
-        ctx.fillStyle = '#ec4899';
-        ctx.fillRect(p.pos.x - 15, p.pos.y + 32, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
+        ctx.fillStyle = 'rgba(236,72,153,0.5)';
+        ctx.fillRect(p.pos.x - 15, hpBarY + hpBarHeight + 3, 30 * (1 - bombCooldown / BOMB_COOLDOWN), 2);
       }
     });
 
