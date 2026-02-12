@@ -256,7 +256,14 @@ interface ResetMessage {
   type: 'RESET';
 }
 
-type GameMessage = InputMessage | JoinMessage | StartMessage | ResetMessage;
+interface SetRoomInfoMessage {
+  type: 'SET_ROOM_INFO';
+  betAmount: number;
+  betDisplay: string;
+  creatorName: string;
+}
+
+type GameMessage = InputMessage | JoinMessage | StartMessage | ResetMessage | SetRoomInfoMessage;
 
 // Helpers
 const dist = (v1: Vector2, v2: Vector2) => Math.hypot(v2.x - v1.x, v2.y - v1.y);
@@ -563,6 +570,12 @@ export default class GameRoom implements Party.Server {
   hostId: string | null = null;
   gameLoop: ReturnType<typeof setInterval> | null = null;
 
+  // Lobby/betting info
+  betAmount: number = 0;
+  betDisplay: string = '0 ETH';
+  creatorName: string = 'Anonymous';
+  roomRegistered: boolean = false;
+
   constructor(readonly room: Party.Room) {
     const { walls, tileMap, obstacles } = generateArena();
     this.state = {
@@ -598,9 +611,27 @@ export default class GameRoom implements Party.Server {
       type: 'STATE',
       payload: this.state,
       yourId: playerId,
-      isHost: playerId === this.hostId
+      isHost: playerId === this.hostId,
+      betAmount: this.betAmount,
+      betDisplay: this.betDisplay,
     }));
     this.broadcast();
+
+    // Auto-start when 2 players have joined
+    const playerCount = Object.keys(this.state.players).length;
+    if (playerCount >= 2 && this.state.status === 'LOBBY') {
+      // Small delay to let the joiner's client initialize
+      setTimeout(() => {
+        if (Object.keys(this.state.players).length >= 2 && this.state.status === 'LOBBY') {
+          this.state.status = 'PLAYING';
+          this.spawnInitialPickups();
+          this.startGameLoop();
+          this.broadcast();
+          // Notify lobby that room is full
+          this.notifyLobby({ type: 'ROOM_FULL', roomId: this.room.id });
+        }
+      }, 1500);
+    }
   }
 
   onMessage(message: string, sender: Party.Connection) {
@@ -617,6 +648,25 @@ export default class GameRoom implements Party.Server {
             this.spawnInitialPickups();
             this.startGameLoop();
             this.broadcast();
+          }
+          break;
+        case 'SET_ROOM_INFO':
+          // Creator sends room info (bet amount, name) after connecting
+          if (sender.id === this.hostId) {
+            this.betAmount = data.betAmount || 0;
+            this.betDisplay = data.betDisplay || '0 ETH';
+            this.creatorName = data.creatorName || 'Anonymous';
+            // Register room in lobby
+            if (!this.roomRegistered) {
+              this.roomRegistered = true;
+              this.notifyLobby({
+                type: 'REGISTER_ROOM',
+                roomId: this.room.id,
+                betAmount: this.betAmount,
+                betDisplay: this.betDisplay,
+                creatorName: this.creatorName,
+              });
+            }
           }
           break;
         case 'RESET':
@@ -667,8 +717,27 @@ export default class GameRoom implements Party.Server {
     if (Object.keys(this.state.players).length === 0) {
       this.stopGameLoop();
       this.state.status = 'LOBBY';
+      // Notify lobby that room is closed
+      if (this.roomRegistered) {
+        this.notifyLobby({ type: 'ROOM_CLOSED', roomId: this.room.id });
+        this.roomRegistered = false;
+      }
     }
     this.broadcast();
+  }
+
+  // Send notification to lobby party
+  async notifyLobby(data: Record<string, any>) {
+    try {
+      const lobbyUrl = `${this.room.env.PARTYKIT_HOST || 'http://localhost:1999'}/parties/lobby/lobby`;
+      await fetch(lobbyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } catch (e) {
+      console.error('[GAME] Error notifying lobby:', e);
+    }
   }
 
   spawnInitialPickups() {
@@ -1296,6 +1365,11 @@ export default class GameRoom implements Party.Server {
       this.state.status = 'VICTORY';
       this.state.winnerId = lastSurvivor;
       this.stopGameLoop();
+      // Notify lobby that room is done
+      if (this.roomRegistered) {
+        this.notifyLobby({ type: 'ROOM_CLOSED', roomId: this.room.id });
+        this.roomRegistered = false;
+      }
     }
 
     this.state.particles = newParticles;

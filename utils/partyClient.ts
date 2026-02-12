@@ -128,6 +128,18 @@ export class PartyClient {
         }));
     }
 
+    // Send room info (bet amount, creator name) — host only, after connecting
+    sendRoomInfo(betAmount: number, betDisplay: string, creatorName: string): void {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+
+        this.socket.send(JSON.stringify({
+            type: 'SET_ROOM_INFO',
+            betAmount,
+            betDisplay,
+            creatorName,
+        }));
+    }
+
     // Reset the game (host only)
     resetGame(): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
@@ -169,3 +181,71 @@ export class PartyClient {
 export const generateRoomId = (): string => {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
+
+// ============ LOBBY CLIENT ============
+
+export interface OpenRoom {
+    roomId: string;
+    betAmount: number;
+    betDisplay: string;
+    creatorName: string;
+    playerCount: number;
+    createdAt: number;
+}
+
+export interface LobbyClientCallbacks {
+    onRoomsUpdate: (rooms: OpenRoom[]) => void;
+}
+
+export class LobbyClient {
+    private socket: PartySocket | null = null;
+    private callbacks: LobbyClientCallbacks;
+
+    constructor(callbacks: LobbyClientCallbacks) {
+        this.callbacks = callbacks;
+    }
+
+    connect(): void {
+        if (this.socket) {
+            this.socket.close();
+        }
+
+        console.log(`[LobbyClient] Connecting to lobby on host: ${PARTYKIT_HOST}`);
+
+        this.socket = new PartySocket({
+            host: PARTYKIT_HOST,
+            room: "lobby",
+            party: "lobby",
+        });
+
+        this.socket.addEventListener('message', (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'ROOMS_LIST') {
+                    this.callbacks.onRoomsUpdate(data.rooms || []);
+                }
+            } catch (e) {
+                console.error('[LobbyClient] Error parsing message:', e);
+            }
+        });
+
+        this.socket.addEventListener('open', () => {
+            console.log('[LobbyClient] Connected to lobby');
+        });
+
+        this.socket.addEventListener('close', () => {
+            console.log('[LobbyClient] Disconnected from lobby');
+        });
+    }
+
+    disconnect(): void {
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
+    }
+
+    isConnected(): boolean {
+        return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+    }
+}

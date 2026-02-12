@@ -21,38 +21,33 @@ const BetSelector: React.FC<BetSelectorProps> = ({ onSelect, disabled = false, s
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-white text-sm font-bold">Select Bet Amount:</p>
+      <p className="text-xs tracking-widest uppercase" style={{ color: 'rgba(0,255,255,0.5)' }}>Select Wager</p>
       <div className="flex gap-3">
         <button
           onClick={() => handleSelect(MIN_BET)}
           disabled={disabled}
-          className={`flex-1 px-4 py-3 rounded border-2 transition-all ${
-            selected === MIN_BET
-              ? 'bg-green-700 border-green-500 text-white'
-              : 'bg-zinc-800 border-zinc-600 text-gray-300 hover:border-zinc-500'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`flex-1 px-4 py-3 bet-option cursor-pointer ${
+            selected === MIN_BET ? 'bet-option-selected' : ''
+          } ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
         >
-          <div className="font-bold text-lg">{formatEther(MIN_BET)} ETH</div>
-          <div className="text-xs mt-1">Low Stake</div>
+          <div className="font-bold text-sm neon-cyan">{formatEther(MIN_BET)} ETH</div>
+          <div className="text-[9px] mt-1" style={{ color: 'rgba(0,255,255,0.4)' }}>LOW STAKE</div>
         </button>
         <button
           onClick={() => handleSelect(MAX_BET)}
           disabled={disabled}
-          className={`flex-1 px-4 py-3 rounded border-2 transition-all ${
-            selected === MAX_BET
-              ? 'bg-green-700 border-green-500 text-white'
-              : 'bg-zinc-800 border-zinc-600 text-gray-300 hover:border-zinc-500'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`flex-1 px-4 py-3 bet-option cursor-pointer ${
+            selected === MAX_BET ? 'bet-option-selected' : ''
+          } ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
         >
-          <div className="font-bold text-lg">{formatEther(MAX_BET)} ETH</div>
-          <div className="text-xs mt-1">High Stake</div>
+          <div className="font-bold text-sm neon-cyan">{formatEther(MAX_BET)} ETH</div>
+          <div className="text-[9px] mt-1" style={{ color: 'rgba(0,255,255,0.4)' }}>HIGH STAKE</div>
         </button>
       </div>
       {selected && (
-        <div className="bg-zinc-800/50 border border-zinc-600 rounded p-2 text-xs text-gray-300">
-          <p>Selected: <span className="font-bold text-white">{formatEther(selected)} ETH</span></p>
-          <p className="mt-1">Winner receives: <span className="font-bold text-green-400">{formatEther(selected * 2n - (selected * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span> (95%)</p>
-          <p>Platform fee: <span className="font-bold text-yellow-400">{formatEther(selected * 2n * TREASURY_FEE_PERCENT / 100n)} ETH</span> (5%)</p>
+        <div className="p-2 text-[9px]" style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,255,255,0.06)' }}>
+          <p>Pool: <span className="neon-green font-bold">{formatEther(selected * 2n)} ETH</span></p>
+          <p className="mt-0.5">Winner takes: <span className="neon-green font-bold">{formatEther(selected * 2n - (selected * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span> <span style={{ color: 'rgba(255,255,255,0.25)' }}>(95%)</span></p>
         </div>
       )}
     </div>

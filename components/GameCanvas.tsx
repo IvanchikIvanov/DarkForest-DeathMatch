@@ -4,13 +4,13 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS } from '../constants';
 import { GameState, PlayerInput, Bomb, Obstacle } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
-import { Trophy, Users, Copy, Play, Shield, Sword, User, Bomb as BombIcon } from 'lucide-react';
+import { Trophy, Users, Sword, User, Bomb as BombIcon } from 'lucide-react';
 import WalletConnect from './WalletConnect';
 import BetSelector from './BetSelector';
 import { useAccount } from 'wagmi';
 import { formatEther } from 'viem';
 import { useDuelArena, MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
-import { PartyClient, generateRoomId } from '../utils/partyClient';
+import { PartyClient, LobbyClient, generateRoomId, type OpenRoom } from '../utils/partyClient';
 
 const GameCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,6 +29,7 @@ const GameCanvas: React.FC = () => {
 
   // PartyKit client
   const partyClientRef = useRef<PartyClient | null>(null);
+  const lobbyClientRef = useRef<LobbyClient | null>(null);
 
   const playerIdRef = useRef<string>('');
   const [playerId, setPlayerId] = useState<string>('');
@@ -44,7 +45,9 @@ const GameCanvas: React.FC = () => {
     winner: ''
   });
 
-  const [inputRoomId, setInputRoomId] = useState('');
+  // Lobby — open rooms list
+  const [openRooms, setOpenRooms] = useState<OpenRoom[]>([]);
+
   const [canvasSize, setCanvasSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 800, height: typeof window !== 'undefined' ? window.innerHeight : 600 });
 
   // Wagmi wallet state
@@ -105,6 +108,21 @@ const GameCanvas: React.FC = () => {
     };
   }, []);
 
+  // --- Initialize Lobby Client ---
+  useEffect(() => {
+    const lobby = new LobbyClient({
+      onRoomsUpdate: (rooms) => {
+        setOpenRooms(rooms);
+      },
+    });
+    lobby.connect();
+    lobbyClientRef.current = lobby;
+
+    return () => {
+      lobby.disconnect();
+    };
+  }, []);
+
   // Show connect modal if not connected
   useEffect(() => {
     if (!walletConnected) {
@@ -133,7 +151,6 @@ const GameCanvas: React.FC = () => {
       if (walletConnected) {
         const txHash = await contractCreateRoom(selectedBet);
         if (txHash) {
-          // Contract room created on-chain
           console.log('Room created on-chain, tx:', txHash);
         }
       }
@@ -142,6 +159,17 @@ const GameCanvas: React.FC = () => {
       const newRoomId = generateRoomId();
       setRoomId(newRoomId);
       partyClientRef.current?.connect(newRoomId);
+
+      // Send room info to game server (which notifies lobby)
+      const betDisplay = formatEther(selectedBet) + ' ETH';
+      const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
+      setTimeout(() => {
+        partyClientRef.current?.sendRoomInfo(
+          Number(selectedBet),
+          betDisplay,
+          creatorName
+        );
+      }, 500);
 
       setIsCreatingRoom(false);
     } catch (error: any) {
@@ -153,13 +181,13 @@ const GameCanvas: React.FC = () => {
     }
   };
 
-  const joinRoomWithBet = async () => {
-    if (!inputRoomId) return;
-
+  // Join an open room from the lobby list
+  const joinOpenRoom = async (room: OpenRoom) => {
     setIsJoiningRoom(true);
     try {
-      const betAmount = selectedBet || MIN_BET;
+      const betAmount = BigInt(room.betAmount);
       setRoomBetAmount(betAmount);
+      setSelectedBet(betAmount);
 
       if (walletConnected) {
         const txHash = await contractJoinRoom(0, betAmount);
@@ -168,15 +196,16 @@ const GameCanvas: React.FC = () => {
         }
       }
 
-      setRoomId(inputRoomId);
-      partyClientRef.current?.connect(inputRoomId);
+      setRoomId(room.roomId);
+      partyClientRef.current?.connect(room.roomId);
 
       setIsJoiningRoom(false);
     } catch (error: any) {
       console.error('Error joining room:', error);
       setIsJoiningRoom(false);
-      setRoomId(inputRoomId);
-      partyClientRef.current?.connect(inputRoomId);
+      // Still join the PartyKit room even if contract fails
+      setRoomId(room.roomId);
+      partyClientRef.current?.connect(room.roomId);
     }
   };
 
@@ -1228,19 +1257,29 @@ const GameCanvas: React.FC = () => {
 
       {/* Connect Wallet Modal */}
       {showConnectModal && !walletConnected && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border-2 border-zinc-700 rounded-lg p-8 max-w-md mx-4">
-            <h2 className="text-2xl font-bold text-white mb-4 text-center">Connect Wallet (Optional)</h2>
-            <p className="text-gray-300 mb-6 text-center">
-              Connect your wallet for blockchain features, or play P2P only. Sepolia network will be added automatically if needed.
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50">
+          <div className="cyber-scanlines">
+            <div className="cyber-particles" />
+          </div>
+          <div className="cyber-panel p-8 max-w-md mx-4 cyber-enter relative z-10">
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-12 h-12 rounded-full border border-cyan-500/30 flex items-center justify-center mb-4" style={{ boxShadow: '0 0 20px rgba(0,255,255,0.15)' }}>
+                <div className="w-3 h-3 rounded-full bg-cyan-400 status-dot" />
+              </div>
+              <h2 className="text-lg font-bold neon-cyan tracking-widest uppercase">CONNECT WALLET</h2>
+              <p className="text-[10px] tracking-widest mt-2" style={{ color: 'rgba(0,255,255,0.35)' }}>OPTIONAL · BLOCKCHAIN FEATURES</p>
+            </div>
+            <p className="text-xs text-center mb-6" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: '1.6' }}>
+              Connect for on-chain wagering or play P2P without wallet. Sepolia network added automatically.
             </p>
             <div className="flex flex-col gap-3">
               <WalletConnect onConnect={handleWalletConnect} onDisconnect={handleWalletDisconnect} />
               <button
                 onClick={() => setShowConnectModal(false)}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-sm"
+                className="cyber-btn-join px-4 py-3 text-xs tracking-widest uppercase cursor-pointer"
+                style={{ clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))' }}
               >
-                Play Without Wallet
+                SKIP · PLAY WITHOUT WALLET
               </button>
             </div>
           </div>
@@ -1249,21 +1288,40 @@ const GameCanvas: React.FC = () => {
 
       {/* Menu */}
       {uiState.status === 'MENU' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white font-[monospace]">
-          <h1 className="text-5xl font-extrabold text-red-600 mb-8 tracking-tighter">DUEL ARENA</h1>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: 'radial-gradient(ellipse at 50% 30%, rgba(0,255,255,0.04) 0%, rgba(0,0,0,0.95) 70%)' }}>
+          {/* Background effects */}
+          <div className="cyber-particles" />
+          <div className="digital-rain" />
+          <div className="heartbeat-line" />
+
+          {/* Title */}
+          <div className="cyber-enter mb-8 text-center relative z-10">
+            <h1
+              className="text-4xl sm:text-5xl font-extrabold neon-red tracking-[0.15em] glitch-title"
+              data-text="DUEL ARENA"
+            >
+              DUEL ARENA
+            </h1>
+            <p className="text-[9px] tracking-[0.5em] mt-3" style={{ color: 'rgba(0,255,255,0.3)' }}>
+              BLOCKCHAIN COMBAT PROTOCOL
+            </p>
+          </div>
 
           {!walletConnected && (
-            <div className="mb-6 p-4 bg-blue-900/50 border border-blue-700 rounded">
-              <p className="text-blue-300 text-sm text-center">
-                Wallet optional - Connect for blockchain features, or play P2P only
+            <div className="cyber-enter-d1 mb-4 px-6 py-2 relative z-10" style={{ background: 'rgba(0,255,255,0.04)', border: '1px solid rgba(0,255,255,0.08)' }}>
+              <p className="text-[10px] tracking-widest text-center" style={{ color: 'rgba(0,255,255,0.5)' }}>
+                WALLET OPTIONAL · CONNECT FOR ON-CHAIN WAGERS
               </p>
             </div>
           )}
 
-          <div className="flex flex-col gap-6 w-96">
+          <div className="flex flex-col gap-5 w-[380px] max-w-[95vw] relative z-10">
             {/* Create Room Section */}
-            <div className="bg-zinc-800/50 border border-zinc-600 rounded p-4">
-              <h2 className="text-xl font-bold mb-4 text-center">CREATE ARENA</h2>
+            <div className="cyber-panel p-5 cyber-enter-d1">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1 h-4" style={{ background: '#ff1744' }} />
+                <h2 className="text-xs font-bold tracking-[0.3em] neon-red">CREATE ARENA</h2>
+              </div>
               <BetSelector
                 onSelect={setSelectedBet}
                 selectedBet={selectedBet}
@@ -1272,80 +1330,185 @@ const GameCanvas: React.FC = () => {
               <button
                 onClick={createRoomWithBet}
                 disabled={!selectedBet || isCreatingRoom}
-                className="w-full mt-4 px-6 py-3 bg-red-700 hover:bg-red-600 disabled:bg-gray-600 text-white font-bold rounded flex items-center justify-center gap-2"
+                className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
               >
-                {isCreatingRoom ? 'Creating...' : (
+                {isCreatingRoom ? (
+                  <span className="animate-pulse">INITIALIZING...</span>
+                ) : (
                   <>
-                    <Sword size={20} /> CREATE ARENA
+                    <Sword size={16} /> CREATE ARENA
                   </>
                 )}
               </button>
             </div>
 
-            {/* Join Room Section */}
-            <div className="bg-zinc-800/50 border border-zinc-600 rounded p-4">
-              <h2 className="text-xl font-bold mb-4 text-center">JOIN ARENA</h2>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  placeholder="ROOM ID"
-                  value={inputRoomId}
-                  onChange={(e) => setInputRoomId(e.target.value.toUpperCase())}
-                  className="flex-1 bg-zinc-800 border border-zinc-600 px-3 py-2 text-sm text-center tracking-widest uppercase focus:outline-none focus:border-red-500"
-                />
+            {/* Open Arenas List */}
+            <div className="cyber-panel p-5 cyber-enter-d2">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4" style={{ background: '#0ff' }} />
+                  <h2 className="text-xs font-bold tracking-[0.3em] neon-cyan">OPEN ARENAS</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full status-dot" style={{ background: '#39ff14', boxShadow: '0 0 6px #39ff14' }} />
+                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(57,255,20,0.5)' }}>LIVE</span>
+                </div>
               </div>
-              <button
-                onClick={joinRoomWithBet}
-                disabled={!inputRoomId || isJoiningRoom}
-                className="w-full px-6 py-3 bg-zinc-700 hover:bg-zinc-600 disabled:bg-gray-600 text-white font-bold rounded flex items-center justify-center gap-2"
-              >
-                {isJoiningRoom ? 'Joining...' : 'JOIN ARENA'}
-              </button>
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto cyber-scroll">
+                {openRooms.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                      NO ACTIVE ARENAS
+                    </p>
+                    <p className="text-[9px] mt-2" style={{ color: 'rgba(0,255,255,0.2)' }}>
+                      CREATE ONE TO BEGIN
+                    </p>
+                  </div>
+                ) : (
+                  openRooms.map((room) => (
+                    <div key={room.roomId} className="room-card flex items-center justify-between p-3">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <Sword size={12} style={{ color: '#ff1744' }} />
+                          <span className="font-bold text-[11px]" style={{ color: 'rgba(255,255,255,0.8)' }}>{room.roomId}</span>
+                          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>by {room.creatorName}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold neon-green">{room.betDisplay}</span>
+                          <span className="text-[9px] flex items-center gap-1" style={{ color: 'rgba(0,255,255,0.4)' }}>
+                            <Users size={10} /> {room.playerCount}/2
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => joinOpenRoom(room)}
+                        disabled={isJoiningRoom}
+                        className="cyber-btn cyber-btn-join px-4 py-2 text-[10px] font-bold tracking-widest cursor-pointer"
+                      >
+                        {isJoiningRoom ? '···' : 'JOIN'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Lobby */}
+      {/* Lobby — waiting for opponent */}
       {uiState.status === 'LOBBY' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white font-[monospace]">
-          <h2 className="text-3xl font-bold mb-6 text-gray-300">WAITING FOR CHALLENGERS</h2>
-          {roomId && (
-            <div className="bg-zinc-800 p-4 rounded border border-zinc-600 mb-8 flex flex-col items-center gap-2">
-              <span className="text-gray-400 text-xs">ARENA ID</span>
-              <div className="flex items-center gap-2">
-                <code className="text-2xl font-bold tracking-widest text-yellow-400 select-all">{roomId}</code>
-                <button onClick={() => navigator.clipboard.writeText(roomId)} className="p-2 hover:bg-zinc-700 rounded"><Copy size={16} /></button>
-              </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: 'radial-gradient(ellipse at 50% 40%, rgba(255,23,68,0.06) 0%, rgba(0,0,0,0.95) 70%)' }}>
+          <div className="cyber-particles" />
+          <div className="heartbeat-line" />
+
+          <div className="cyber-enter relative z-10 flex flex-col items-center">
+            {/* Pulsing sword icon */}
+            <div className="mb-6 pulse-border p-6 rounded-full" style={{ background: 'rgba(255,23,68,0.05)' }}>
+              <Sword size={40} style={{ color: '#ff1744', filter: 'drop-shadow(0 0 12px rgba(255,23,68,0.6))' }} />
             </div>
-          )}
-          <div className="mb-8 flex items-center gap-2 text-gray-300 animate-pulse">
-            <Users size={20} />
-            <span>{uiState.playerCount} Gladiator(s) Ready</span>
-          </div>
-          {isHost && uiState.playerCount > 1 && (
-            <button onClick={startHostedGame} className="px-8 py-4 bg-green-700 hover:bg-green-600 text-white font-bold text-xl rounded flex items-center gap-2 animate-bounce">
-              <Play size={24} /> FIGHT!
+
+            <h2
+              className="text-2xl font-bold tracking-[0.3em] mb-2 glitch-title neon-red"
+              data-text="WAITING FOR CHALLENGER"
+            >
+              WAITING FOR CHALLENGER
+            </h2>
+            <p className="text-[9px] tracking-[0.5em] mb-8" style={{ color: 'rgba(0,255,255,0.3)' }}>
+              ARENA INITIALIZED · SCANNING FOR OPPONENTS
+            </p>
+
+            {roomBetAmount && (
+              <div className="cyber-panel p-4 mb-6 text-center cyber-enter-d1 w-64">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>WAGER</span>
+                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>POOL</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold neon-green">{formatEther(roomBetAmount)} ETH</span>
+                  <span className="text-lg font-bold neon-cyan">{formatEther(roomBetAmount * 2n)} ETH</span>
+                </div>
+                <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(0,255,255,0.08)' }}>
+                  <span className="text-[9px]" style={{ color: 'rgba(57,255,20,0.4)' }}>
+                    WINNER TAKES {formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH (95%)
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="cyber-enter-d1 mb-6 flex items-center gap-3 px-5 py-3" style={{ background: 'rgba(0,255,255,0.03)', border: '1px solid rgba(0,255,255,0.1)' }}>
+              <Users size={16} style={{ color: '#0ff' }} />
+              <span className="text-sm tracking-widest neon-cyan">{uiState.playerCount}/2</span>
+              <span className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>GLADIATORS</span>
+            </div>
+
+            {uiState.playerCount >= 2 && (
+              <div className="cyber-enter-d2 mb-4 px-6 py-3 text-center" style={{ background: 'rgba(57,255,20,0.05)', border: '1px solid rgba(57,255,20,0.2)' }}>
+                <p className="text-sm font-bold neon-green tracking-widest animate-pulse">
+                  OPPONENT FOUND · INITIATING COMBAT
+                </p>
+              </div>
+            )}
+            {uiState.playerCount < 2 && (
+              <p className="text-[10px] tracking-widest animate-pulse" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                SCANNING LOBBY FOR OPPONENTS...
+              </p>
+            )}
+
+            <button
+              onClick={() => {
+                partyClientRef.current?.disconnect();
+                setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
+              }}
+              className="cyber-btn cyber-btn-join mt-8 px-6 py-2 text-[10px] tracking-widest cursor-pointer"
+            >
+              ABORT MISSION
             </button>
-          )}
-          {isHost && uiState.playerCount <= 1 && (
-            <div className="text-red-500 text-sm">Need at least 2 players to start</div>
-          )}
-          {!isHost && <p className="text-gray-500">Sharpening blade...</p>}
+          </div>
         </div>
       )}
 
       {/* Victory */}
       {uiState.status === 'VICTORY' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm text-white font-[monospace]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: uiState.winner === playerIdRef.current ? 'radial-gradient(ellipse at 50% 30%, rgba(255,215,0,0.08) 0%, rgba(0,0,0,0.95) 70%)' : 'radial-gradient(ellipse at 50% 30%, rgba(255,23,68,0.08) 0%, rgba(0,0,0,0.95) 70%)' }}>
+          <div className="cyber-particles" />
+
           {uiState.winner === playerIdRef.current ? (
-            <>
-              <Trophy size={80} className="text-yellow-400 mb-4 animate-bounce" />
-              <h2 className="text-5xl font-bold text-yellow-400 mb-2">VICTORY</h2>
-              <p className="text-gray-400 mb-4">You are the champion</p>
-              {roomContractId !== null && roomBetAmount && (
-                <div className="mb-6 p-4 bg-zinc-800/50 border border-zinc-600 rounded">
-                  <p className="text-sm text-gray-300 mb-2">Reward: <span className="font-bold text-green-400">{formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span></p>
+            <div className="cyber-enter flex flex-col items-center relative z-10">
+              {/* Victory glow */}
+              <div className="victory-flash mb-6 p-5 rounded-full" style={{ background: 'rgba(255,215,0,0.05)' }}>
+                <Trophy size={64} style={{ color: '#ffd700', filter: 'drop-shadow(0 0 20px rgba(255,215,0,0.6))' }} />
+              </div>
+
+              <h2
+                className="text-4xl sm:text-5xl font-extrabold tracking-[0.3em] mb-2 glitch-title neon-gold"
+                data-text="VICTORY"
+              >
+                VICTORY
+              </h2>
+              <p className="text-[10px] tracking-[0.5em] mb-8" style={{ color: 'rgba(255,215,0,0.4)' }}>
+                COMBAT PROTOCOL COMPLETE · CHAMPION
+              </p>
+
+              {roomBetAmount && (
+                <div className="cyber-panel p-5 mb-6 cyber-enter-d1 w-80">
+                  <div className="text-center mb-4">
+                    <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>REWARD BREAKDOWN</span>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-2 pb-2" style={{ borderBottom: '1px solid rgba(0,255,255,0.06)' }}>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>POOL TOTAL</span>
+                    <span className="text-sm font-bold neon-cyan">{formatEther(roomBetAmount * 2n)} ETH</span>
+                  </div>
+                  <div className="flex items-center justify-between mb-2 pb-2" style={{ borderBottom: '1px solid rgba(0,255,255,0.06)' }}>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>PLATFORM FEE (5%)</span>
+                    <span className="text-sm" style={{ color: 'rgba(255,23,68,0.6)' }}>-{formatEther(roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n)} ETH</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] font-bold neon-green">YOUR REWARD</span>
+                    <span className="text-xl font-bold neon-green">{formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span>
+                  </div>
+
                   {roomContractId !== null && (
                     <button
                       onClick={async () => {
@@ -1366,20 +1529,41 @@ const GameCanvas: React.FC = () => {
                         }
                       }}
                       disabled={claimingReward}
-                      className="px-6 py-3 bg-green-700 hover:bg-green-600 disabled:bg-gray-600 text-white font-bold rounded flex items-center gap-2"
+                      className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
                     >
-                      {claimingReward ? 'Claiming...' : 'Claim Reward'}
+                      {claimingReward ? (
+                        <span className="animate-pulse">CLAIMING...</span>
+                      ) : (
+                        'CLAIM REWARD'
+                      )}
                     </button>
                   )}
                 </div>
               )}
-            </>
+            </div>
           ) : (
-            <>
-              <User size={80} className="text-gray-600 mb-4" />
-              <h2 className="text-5xl font-bold text-red-600 mb-2">DEFEATED</h2>
-              <p className="text-gray-400 mb-8">Better luck next time</p>
-            </>
+            <div className="cyber-enter flex flex-col items-center relative z-10">
+              <div className="mb-6 p-5 rounded-full" style={{ background: 'rgba(255,23,68,0.05)' }}>
+                <User size={64} style={{ color: '#ff1744', filter: 'drop-shadow(0 0 15px rgba(255,23,68,0.4))', opacity: 0.6 }} />
+              </div>
+
+              <h2
+                className="text-4xl sm:text-5xl font-extrabold tracking-[0.3em] mb-2 glitch-title neon-red"
+                data-text="DEFEATED"
+              >
+                DEFEATED
+              </h2>
+              <p className="text-[10px] tracking-[0.5em] mb-4" style={{ color: 'rgba(255,23,68,0.4)' }}>
+                COMBAT PROTOCOL TERMINATED
+              </p>
+
+              {roomBetAmount && (
+                <div className="cyber-panel p-4 mb-6 cyber-enter-d1 w-72 text-center">
+                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>FUNDS LOST</span>
+                  <div className="text-lg font-bold mt-1" style={{ color: 'rgba(255,23,68,0.7)' }}>-{formatEther(roomBetAmount)} ETH</div>
+                </div>
+              )}
+            </div>
           )}
 
           <button
@@ -1387,9 +1571,9 @@ const GameCanvas: React.FC = () => {
               partyClientRef.current?.disconnect();
               setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
             }}
-            className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded flex items-center gap-2"
+            className="cyber-btn cyber-btn-join mt-4 px-8 py-3 text-[10px] font-bold tracking-widest cursor-pointer relative z-10"
           >
-            BACK TO MENU
+            BACK TO LOBBY
           </button>
         </div>
       )}
