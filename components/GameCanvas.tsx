@@ -64,6 +64,12 @@ const GameCanvas: React.FC = () => {
   const [claimingReward, setClaimingReward] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   // Assets no longer loaded - all rendering is vector-based
   useEffect(() => {
@@ -143,7 +149,7 @@ const GameCanvas: React.FC = () => {
 
   const createRoomWithBet = async () => {
     if (!selectedBet) {
-      alert('Please select bet amount');
+      showToast('Please select bet amount', 'error');
       return;
     }
 
@@ -1529,13 +1535,13 @@ const GameCanvas: React.FC = () => {
                         try {
                           const txHash = await contractClaimReward(roomContractId);
                           if (txHash) {
-                            alert('Reward claimed successfully!');
+                            showToast('Reward claimed successfully!');
                           } else {
-                            alert('Contract not available. Reward cannot be claimed.');
+                            showToast('Contract not available', 'error');
                           }
                         } catch (error: any) {
                           console.error('Error claiming reward:', error);
-                          alert('Failed to claim reward');
+                          showToast('Failed to claim reward', 'error');
                         } finally {
                           setClaimingReward(false);
                         }
@@ -1587,6 +1593,28 @@ const GameCanvas: React.FC = () => {
           >
             BACK TO LOBBY
           </button>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999] cyber-enter font-[monospace]"
+          style={{
+            background: toast.type === 'success'
+              ? 'linear-gradient(135deg, rgba(57,255,20,0.12) 0%, rgba(0,0,0,0.9) 100%)'
+              : 'linear-gradient(135deg, rgba(255,23,68,0.12) 0%, rgba(0,0,0,0.9) 100%)',
+            border: `1px solid ${toast.type === 'success' ? 'rgba(57,255,20,0.3)' : 'rgba(255,23,68,0.3)'}`,
+            clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+            padding: '12px 24px',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <span
+            className={`text-xs tracking-widest font-bold ${toast.type === 'success' ? 'neon-green' : 'neon-red'}`}
+          >
+            {toast.message}
+          </span>
         </div>
       )}
     </div>
