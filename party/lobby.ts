@@ -8,6 +8,7 @@ interface RoomInfo {
   creatorName: string;
   playerCount: number;
   createdAt: number;
+  contractRoomId?: number; // on-chain room ID from smart contract
 }
 
 export default class LobbyRoom implements Party.Server {
@@ -38,6 +39,7 @@ export default class LobbyRoom implements Party.Server {
             creatorName: data.creatorName || 'Anonymous',
             playerCount: 1,
             createdAt: Date.now(),
+            contractRoomId: data.contractRoomId,
           };
           this.rooms.set(data.roomId, info);
           this.broadcastRooms();
@@ -87,6 +89,7 @@ export default class LobbyRoom implements Party.Server {
               creatorName: data.creatorName || 'Anonymous',
               playerCount: 1,
               createdAt: Date.now(),
+              contractRoomId: data.contractRoomId,
             };
             this.rooms.set(data.roomId, info);
             this.broadcastRooms();

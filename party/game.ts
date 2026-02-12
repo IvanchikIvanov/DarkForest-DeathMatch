@@ -261,6 +261,7 @@ interface SetRoomInfoMessage {
   betAmount: number;
   betDisplay: string;
   creatorName: string;
+  contractRoomId?: number;
 }
 
 type GameMessage = InputMessage | JoinMessage | StartMessage | ResetMessage | SetRoomInfoMessage;
@@ -574,6 +575,7 @@ export default class GameRoom implements Party.Server {
   betAmount: number = 0;
   betDisplay: string = '0 ETH';
   creatorName: string = 'Anonymous';
+  contractRoomId: number = -1;
   roomRegistered: boolean = false;
 
   constructor(readonly room: Party.Room) {
@@ -651,11 +653,12 @@ export default class GameRoom implements Party.Server {
           }
           break;
         case 'SET_ROOM_INFO':
-          // Creator sends room info (bet amount, name) after connecting
+          // Creator sends room info (bet amount, name, contract ID) after connecting
           if (sender.id === this.hostId) {
             this.betAmount = data.betAmount || 0;
             this.betDisplay = data.betDisplay || '0 ETH';
             this.creatorName = data.creatorName || 'Anonymous';
+            this.contractRoomId = data.contractRoomId ?? -1;
             // Register room in lobby
             if (!this.roomRegistered) {
               this.roomRegistered = true;
@@ -665,6 +668,7 @@ export default class GameRoom implements Party.Server {
                 betAmount: this.betAmount,
                 betDisplay: this.betDisplay,
                 creatorName: this.creatorName,
+                contractRoomId: this.contractRoomId,
               });
             }
           }

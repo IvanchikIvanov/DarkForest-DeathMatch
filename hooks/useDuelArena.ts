@@ -200,6 +200,15 @@ export function useDuelArena() {
   };
 }
 
+export function useNextRoomId() {
+  return useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DUEL_ARENA_ABI,
+    functionName: 'nextRoomId',
+    query: { enabled: !!CONTRACT_ADDRESS, refetchInterval: 5000 },
+  });
+}
+
 export function useRoomBetAmount(roomId: number | undefined) {
   return useReadContract({
     address: CONTRACT_ADDRESS,

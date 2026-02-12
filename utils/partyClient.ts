@@ -128,8 +128,8 @@ export class PartyClient {
         }));
     }
 
-    // Send room info (bet amount, creator name) — host only, after connecting
-    sendRoomInfo(betAmount: number, betDisplay: string, creatorName: string): void {
+    // Send room info (bet amount, creator name, contract ID) — host only, after connecting
+    sendRoomInfo(betAmount: number, betDisplay: string, creatorName: string, contractRoomId?: number): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
 
         this.socket.send(JSON.stringify({
@@ -137,6 +137,7 @@ export class PartyClient {
             betAmount,
             betDisplay,
             creatorName,
+            contractRoomId: contractRoomId ?? -1,
         }));
     }
 
@@ -191,6 +192,7 @@ export interface OpenRoom {
     creatorName: string;
     playerCount: number;
     createdAt: number;
+    contractRoomId?: number; // on-chain room ID from smart contract
 }
 
 export interface LobbyClientCallbacks {

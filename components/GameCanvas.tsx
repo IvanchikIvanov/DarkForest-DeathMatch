@@ -9,7 +9,7 @@ import WalletConnect from './WalletConnect';
 import BetSelector from './BetSelector';
 import { useAccount } from 'wagmi';
 import { formatEther } from 'viem';
-import { useDuelArena, MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
+import { useDuelArena, useNextRoomId, MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
 import { PartyClient, LobbyClient, generateRoomId, type OpenRoom } from '../utils/partyClient';
 
 const GameCanvas: React.FC = () => {
@@ -53,6 +53,7 @@ const GameCanvas: React.FC = () => {
   // Wagmi wallet state
   const { address: walletAddress, isConnected: walletConnected } = useAccount();
   const { createRoom: contractCreateRoom, joinRoom: contractJoinRoom, finishGame: contractFinishGame, claimReward: contractClaimReward, isWriting } = useDuelArena();
+  const { data: nextRoomIdData, refetch: refetchNextRoomId } = useNextRoomId();
 
   const [selectedBet, setSelectedBet] = useState<bigint | null>(null);
   const [roomContractId, setRoomContractId] = useState<number | null>(null);
@@ -147,11 +148,20 @@ const GameCanvas: React.FC = () => {
     }
 
     setIsCreatingRoom(true);
+    let onChainRoomId: number = -1;
     try {
       if (walletConnected) {
+        // Read the nextRoomId BEFORE creating, so we know what ID the contract will assign
+        const { data: freshNextId } = await refetchNextRoomId();
+        if (freshNextId !== undefined) {
+          onChainRoomId = Number(freshNextId);
+          console.log('On-chain room ID will be:', onChainRoomId);
+        }
+
         const txHash = await contractCreateRoom(selectedBet);
         if (txHash) {
           console.log('Room created on-chain, tx:', txHash);
+          setRoomContractId(onChainRoomId);
         }
       }
       setRoomBetAmount(selectedBet);
@@ -160,14 +170,15 @@ const GameCanvas: React.FC = () => {
       setRoomId(newRoomId);
       partyClientRef.current?.connect(newRoomId);
 
-      // Send room info to game server (which notifies lobby)
+      // Send room info to game server (which notifies lobby) — include contractRoomId
       const betDisplay = formatEther(selectedBet) + ' ETH';
       const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
       setTimeout(() => {
         partyClientRef.current?.sendRoomInfo(
           Number(selectedBet),
           betDisplay,
-          creatorName
+          creatorName,
+          onChainRoomId
         );
       }, 500);
 
@@ -189,10 +200,11 @@ const GameCanvas: React.FC = () => {
       setRoomBetAmount(betAmount);
       setSelectedBet(betAmount);
 
-      if (walletConnected) {
-        const txHash = await contractJoinRoom(0, betAmount);
+      if (walletConnected && room.contractRoomId !== undefined && room.contractRoomId >= 0) {
+        setRoomContractId(room.contractRoomId);
+        const txHash = await contractJoinRoom(room.contractRoomId, betAmount);
         if (txHash) {
-          console.log('Joined room on-chain, tx:', txHash);
+          console.log('Joined room on-chain, tx:', txHash, 'contractRoomId:', room.contractRoomId);
         }
       }
 
