@@ -628,7 +628,7 @@ const GameCanvas: React.FC = () => {
       });
     }
 
-    // Draw Health Pickups - HUGE AND SUPER VISIBLE
+    // Draw Health Pickups - ENHANCED with floating animation and glow
     const healthPickups = state.healthPickups || [];
     const gunPickups = state.gunPickups || [];
     const swordPickups = (state as any).swordPickups || [];
@@ -639,72 +639,140 @@ const GameCanvas: React.FC = () => {
       ctx.save();
       ctx.translate(hp.pos.x, hp.pos.y);
       
+      // Floating bob animation
+      const bobY = Math.sin(timeRef.current * 3) * 5;
+      ctx.translate(0, bobY);
+      
       // Strong pulsing glow effect
-      const pulse = 1 + Math.sin(timeRef.current * 4) * 0.3;
+      const pulse = 1 + Math.sin(timeRef.current * 4) * 0.2;
       ctx.scale(pulse, pulse);
       
-      // HUGE outer glow circle - bright green
+      // Outer glow ring - multiple layers
       ctx.shadowColor = '#00ff00';
-      ctx.shadowBlur = 60;
-      ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+      ctx.shadowBlur = 50;
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.15)';
       ctx.beginPath();
-      ctx.arc(0, 0, 80, 0, Math.PI * 2);
+      ctx.arc(0, 0, 70, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Mid glow
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.4)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 45, 0, Math.PI * 2);
       ctx.fill();
       
       // Inner bright circle
+      ctx.shadowBlur = 15;
       ctx.fillStyle = '#00ff00';
       ctx.beginPath();
-      ctx.arc(0, 0, 40, 0, Math.PI * 2);
+      ctx.arc(0, 0, 30, 0, Math.PI * 2);
       ctx.fill();
       
-      // Green cross (health symbol) - HUGE
+      // White center
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-50, -12, 100, 24); // Horizontal
-      ctx.fillRect(-12, -50, 24, 100); // Vertical
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill();
       
-      // Red outline for visibility
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(-50, -12, 100, 24);
-      ctx.strokeRect(-12, -50, 24, 100);
+      // Green cross (health symbol) - with 3D effect
+      // Shadow
+      ctx.fillStyle = '#006600';
+      ctx.fillRect(-45, -10, 90, 20);
+      ctx.fillRect(-10, -45, 20, 90);
+      // Main
+      ctx.fillStyle = '#00ff00';
+      ctx.fillRect(-40, -8, 80, 16);
+      ctx.fillRect(-8, -40, 16, 80);
+      // Highlight
+      ctx.fillStyle = '#88ff88';
+      ctx.fillRect(-38, -6, 76, 4);
+      ctx.fillRect(-6, -38, 4, 76);
+      
+      // Sparkle effects
+      const sparkleAngle = timeRef.current * 2;
+      for (let i = 0; i < 4; i++) {
+        const angle = sparkleAngle + (i * Math.PI / 2);
+        const sx = Math.cos(angle) * 50;
+        const sy = Math.sin(angle) * 50;
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + Math.sin(timeRef.current * 5 + i) * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
       
       ctx.shadowBlur = 0;
       ctx.restore();
     });
 
-    // Draw Gun Pickups - Golden pistol icon
-    // gunPickups already defined above
+    // Draw Gun Pickups - ENHANCED with detailed golden pistol
     gunPickups.forEach((gp: any) => {
       if (!gp.active) return;
       ctx.save();
       ctx.translate(gp.pos.x, gp.pos.y);
 
+      // Floating animation
+      const bobY = Math.sin(timeRef.current * 2.5 + 1) * 4;
+      ctx.translate(0, bobY);
+      
+      // Slow rotation
+      const rot = Math.sin(timeRef.current * 1.5) * 0.15;
+      ctx.rotate(rot);
+
       // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
       ctx.scale(pulse, pulse);
 
-      // Outer glow
+      // Outer glow - multiple layers
       ctx.shadowColor = '#fbbf24';
-      ctx.shadowBlur = 35;
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+      ctx.shadowBlur = 40;
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
       ctx.beginPath();
-      ctx.arc(0, 0, 45, 0, Math.PI * 2);
+      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Mid glow
+      ctx.shadowBlur = 25;
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 35, 0, Math.PI * 2);
       ctx.fill();
 
-      // Gun shape (pistol)
+      // Gun body - detailed golden pistol
+      ctx.fillStyle = '#d97706';
+      // Barrel main
+      ctx.fillRect(-28, -10, 45, 14);
+      // Barrel highlight
       ctx.fillStyle = '#fbbf24';
-      // Barrel
-      ctx.fillRect(-25, -8, 40, 12);
-      // Handle
-      ctx.fillRect(-5, -8, 15, 30);
+      ctx.fillRect(-26, -8, 41, 4);
+      // Muzzle
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(17, -8, 8, 10);
+      // Grip
+      ctx.fillStyle = '#b45309';
+      ctx.fillRect(-8, 0, 18, 32);
+      ctx.fillRect(-6, 28, 14, 6);
       // Trigger guard
-      ctx.fillRect(5, 8, 10, 8);
-
-      // Outline
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(5, 10, 10, 0, Math.PI);
+      ctx.stroke();
+      // Trigger
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(3, 8, 4, 8);
+      
+      // Decorative lines
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-25, -8, 40, 12);
-      ctx.strokeRect(-5, -8, 15, 30);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-28, -10, 45, 14);
+      ctx.strokeRect(-8, 0, 18, 32);
+
+      // Sparkle on gun
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.arc(-15, -3, 4, 0, Math.PI * 2);
+      ctx.fill();
 
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -742,106 +810,203 @@ const GameCanvas: React.FC = () => {
       });
     }
 
-    // Draw Sword Pickups - Silver/white sword icon
-    // swordPickups already defined above
+    // Draw Sword Pickups - ENHANCED with floating animation and sparkle
     swordPickups.forEach((sp: any) => {
       if (!sp.active) return;
       ctx.save();
       ctx.translate(sp.pos.x, sp.pos.y);
 
+      // Floating animation
+      const bobY = Math.sin(timeRef.current * 2.8 + 2) * 5;
+      ctx.translate(0, bobY);
+      
+      // Slow rotation
+      const rot = Math.sin(timeRef.current * 1.2) * 0.2;
+      ctx.rotate(Math.PI / 4 + rot);
+
       // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
       ctx.scale(pulse, pulse);
 
-      // Outer glow
+      // Outer glow - multiple layers
       ctx.shadowColor = '#e5e7eb';
-      ctx.shadowBlur = 35;
-      ctx.fillStyle = 'rgba(229, 231, 235, 0.3)';
+      ctx.shadowBlur = 45;
+      ctx.fillStyle = 'rgba(229, 231, 235, 0.15)';
       ctx.beginPath();
-      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.arc(0, 0, 55, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Mid glow
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = 'rgba(229, 231, 235, 0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, 0, Math.PI * 2);
       ctx.fill();
 
-      // Sword shape - vector only
-      ctx.rotate(Math.PI / 4);
+      // Sword blade - detailed
+      ctx.fillStyle = '#71717a';
+      ctx.fillRect(-6, -38, 12, 76); // Darker base
+      // Main blade
       ctx.fillStyle = '#e5e7eb';
-      ctx.fillRect(-5, -35, 10, 70); // Blade
-      ctx.strokeStyle = '#a1a1aa';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(-5, -35, 10, 70);
-      // Blade highlight
+      ctx.fillRect(-5, -36, 10, 72);
+      // Blade highlight (left side)
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-2, -33, 4, 60);
-      // Guard
+      ctx.fillRect(-4, -34, 3, 65);
+      // Blade edge highlight
+      ctx.fillStyle = '#d4d4d8';
+      ctx.fillRect(2, -34, 2, 65);
+      
+      // Blade fuller (blood groove)
+      ctx.fillStyle = '#a1a1aa';
+      ctx.fillRect(-1, -30, 2, 50);
+
+      // Guard - ornate crossguard
       ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(-15, 25, 30, 8);
-      ctx.strokeStyle = '#92400e';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(-15, 25, 30, 8);
-      // Handle
+      ctx.fillRect(-18, 32, 36, 6);
+      // Guard decoration
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(-16, 31, 4, 8);
+      ctx.fillRect(12, 31, 4, 8);
+      // Guard highlight
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(-14, 32, 28, 2);
+      
+      // Handle/Grip
       ctx.fillStyle = '#52525b';
-      ctx.fillRect(-4, 33, 8, 15);
+      ctx.fillRect(-4, 38, 8, 18);
+      // Grip wrapping
+      ctx.fillStyle = '#3f3f46';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(-4, 40 + i * 4, 8, 2);
+      }
+      // Pommel
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(0, 58, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#92400e';
+      ctx.beginPath();
+      ctx.arc(0, 58, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sparkle effects around sword
+      const sparkleAngle = timeRef.current * 1.5;
+      for (let i = 0; i < 3; i++) {
+        const angle = sparkleAngle + (i * Math.PI * 2 / 3);
+        const sx = Math.cos(angle) * 45;
+        const sy = Math.sin(angle) * 45;
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(timeRef.current * 4 + i) * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3 + i, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.shadowBlur = 0;
       ctx.restore();
     });
 
-    // Draw Bomb Pickups - Orange bomb icon
+    // Draw Bomb Pickups - ENHANCED with animated fuse and glow
     const bombPickups = (state as any).bombPickups || [];
     bombPickups.forEach((bp: any) => {
       if (!bp.active) return;
       ctx.save();
       ctx.translate(bp.pos.x, bp.pos.y);
 
+      // Floating animation
+      const bobY = Math.sin(timeRef.current * 2.2 + 3) * 4;
+      ctx.translate(0, bobY);
+
       // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.2;
+      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
       ctx.scale(pulse, pulse);
 
-      // Outer glow
+      // Outer glow - multiple layers
       ctx.shadowColor = '#f97316';
-      ctx.shadowBlur = 35;
-      ctx.fillStyle = 'rgba(249, 115, 22, 0.3)';
+      ctx.shadowBlur = 45;
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.15)';
       ctx.beginPath();
-      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.arc(0, 0, 55, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Mid glow
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, 0, Math.PI * 2);
       ctx.fill();
 
-      // Bomb body (dark circle)
+      // Bomb body - detailed
+      // Shadow
+      ctx.fillStyle = '#0f0f0f';
+      ctx.beginPath();
+      ctx.arc(3, 3, 27, 0, Math.PI * 2);
+      ctx.fill();
+      // Main body
       ctx.fillStyle = '#1f2937';
       ctx.beginPath();
-      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.arc(0, 0, 26, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Bomb highlight (top left)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.arc(-10, -10, 12, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Bomb stripe
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-26, -2, 52, 8);
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillRect(-26, 0, 52, 2);
+
+      // Bomb neck
+      ctx.fillStyle = '#374151';
+      ctx.fillRect(-8, -32, 16, 10);
 
       // Bomb outline
-      ctx.strokeStyle = '#374151';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Highlight reflection
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.strokeStyle = '#4b5563';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(-8, -8, 8, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(0, 0, 26, 0, Math.PI * 2);
+      ctx.stroke();
 
       // Fuse
       ctx.strokeStyle = '#9ca3af';
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(15, -15);
-      ctx.lineTo(25, -28);
+      ctx.moveTo(0, -32);
+      ctx.quadraticCurveTo(10, -40, 20, -35);
       ctx.stroke();
 
-      // Fuse spark (flickering animation)
-      const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
-      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
-      ctx.shadowColor = '#ff6b00';
-      ctx.shadowBlur = 12;
+      // Fuse knot
+      ctx.fillStyle = '#6b7280';
       ctx.beginPath();
-      ctx.arc(25, -28, 6, 0, Math.PI * 2);
+      ctx.arc(0, -32, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Inner spark glow
+      // Fuse spark (animated)
+      const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+      const sparkX = 20 + Math.sin(timeRef.current * 3) * 3;
+      const sparkY = -35 + Math.cos(timeRef.current * 2.5) * 3;
+      
+      // Outer spark glow
+      ctx.shadowColor = '#ff6b00';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(sparkX, sparkY, 10, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Main spark
+      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
+      ctx.beginPath();
+      ctx.arc(sparkX, sparkY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Inner bright core
       ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(25, -28, 3, 0, Math.PI * 2);
+      ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.shadowBlur = 0;
@@ -1588,7 +1753,7 @@ const GameCanvas: React.FC = () => {
           <div className="heartbeat-line" />
 
           {/* Title */}
-          <div className="cyber-enter mb-8 text-center relative z-10">
+          <div className="cyber-enter mb-6 text-center relative z-10">
             <h1
               className="text-4xl sm:text-5xl font-extrabold neon-red tracking-[0.15em] glitch-title"
               data-text="DUEL ARENA"
@@ -1598,6 +1763,17 @@ const GameCanvas: React.FC = () => {
             <p className="text-[9px] tracking-[0.5em] mt-3" style={{ color: 'rgba(0,255,255,0.3)' }}>
               BLOCKCHAIN COMBAT PROTOCOL
             </p>
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <div className="flex items-center gap-1.5">
+                <Sword size={11} style={{ color: '#ff1744', opacity: 0.6 }} />
+                <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>1v1 COMBAT</span>
+              </div>
+              <div className="w-px h-3" style={{ background: 'rgba(0,255,255,0.15)' }} />
+              <div className="flex items-center gap-1.5">
+                <Users size={11} style={{ color: '#0ff', opacity: 0.6 }} />
+                <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>2 PLAYERS MAX</span>
+              </div>
+            </div>
           </div>
 
           {!walletConnected && (
@@ -1608,12 +1784,18 @@ const GameCanvas: React.FC = () => {
             </div>
           )}
 
-          <div className="flex flex-col gap-5 w-[380px] max-w-[95vw] relative z-10">
-            {/* Create Room Section */}
+          <div className="flex flex-col gap-5 w-[420px] max-w-[95vw] relative z-10">
+            {/* Create Arena Section */}
             <div className="cyber-panel p-5 cyber-enter-d1">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-4" style={{ background: '#ff1744' }} />
-                <h2 className="text-xs font-bold tracking-[0.3em] neon-red">CREATE ARENA</h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4" style={{ background: '#ff1744' }} />
+                  <h2 className="text-xs font-bold tracking-[0.3em] neon-red">CREATE ARENA</h2>
+                </div>
+                <div className="flex items-center gap-1.5 px-2 py-1" style={{ background: 'rgba(255,23,68,0.06)', border: '1px solid rgba(255,23,68,0.12)' }}>
+                  <Users size={10} style={{ color: 'rgba(255,23,68,0.5)' }} />
+                  <span className="text-[8px] tracking-widest" style={{ color: 'rgba(255,23,68,0.5)' }}>2P ARENA</span>
+                </div>
               </div>
               <BetSelector
                 onSelect={setSelectedBet}
@@ -1626,7 +1808,7 @@ const GameCanvas: React.FC = () => {
                 className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
               >
                 {isCreatingRoom ? (
-                  <span className="animate-pulse">INITIALIZING...</span>
+                  <span className="animate-pulse">INITIALIZING ARENA...</span>
                 ) : (
                   <>
                     <Sword size={16} /> CREATE ARENA
@@ -1650,6 +1832,9 @@ const GameCanvas: React.FC = () => {
               <div className="flex flex-col gap-2 max-h-60 overflow-y-auto cyber-scroll">
                 {openRooms.length === 0 ? (
                   <div className="text-center py-8">
+                    <div className="mb-3">
+                      <Sword size={24} style={{ color: 'rgba(255,255,255,0.08)', margin: '0 auto' }} />
+                    </div>
                     <p className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
                       NO ACTIVE ARENAS
                     </p>
@@ -1658,27 +1843,35 @@ const GameCanvas: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  openRooms.map((room) => (
+                  openRooms.map((room, index) => (
                     <div key={room.roomId} className="room-card flex items-center justify-between p-3">
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-2">
-                          <Sword size={12} style={{ color: '#ff1744' }} />
-                          <span className="font-bold text-[11px]" style={{ color: 'rgba(255,255,255,0.8)' }}>{room.roomId}</span>
-                          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>by {room.creatorName}</span>
+                          <div className="flex items-center justify-center w-5 h-5 rounded" style={{ background: 'rgba(255,23,68,0.12)', border: '1px solid rgba(255,23,68,0.25)' }}>
+                            <Sword size={10} style={{ color: '#ff1744' }} />
+                          </div>
+                          <span className="font-bold text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                            {room.creatorName}&apos;s Arena
+                          </span>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 ml-7">
                           <span className="text-[10px] font-bold neon-green">{room.betDisplay}</span>
                           <span className="text-[9px] flex items-center gap-1" style={{ color: 'rgba(0,255,255,0.4)' }}>
                             <Users size={10} /> {room.playerCount}/2
                           </span>
+                          {room.playerCount < 2 && (
+                            <span className="text-[8px] tracking-wider px-1.5 py-0.5 animate-pulse" style={{ color: '#39ff14', background: 'rgba(57,255,20,0.08)', border: '1px solid rgba(57,255,20,0.15)' }}>
+                              OPEN
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button
                         onClick={() => joinOpenRoom(room)}
-                        disabled={isJoiningRoom}
+                        disabled={isJoiningRoom || room.playerCount >= 2}
                         className="cyber-btn cyber-btn-join px-4 py-2 text-[10px] font-bold tracking-widest cursor-pointer"
                       >
-                        {isJoiningRoom ? '···' : 'JOIN'}
+                        {isJoiningRoom ? '···' : room.playerCount >= 2 ? 'FULL' : 'JOIN'}
                       </button>
                     </div>
                   ))

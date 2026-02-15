@@ -2,7 +2,7 @@
 
 import { ReactNode } from 'react';
 import { OnchainKitProvider } from '@coinbase/onchainkit';
-import { baseSepolia } from 'wagmi/chains';
+import { base } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { coinbaseWallet } from 'wagmi/connectors';
@@ -10,7 +10,7 @@ import { coinbaseWallet } from 'wagmi/connectors';
 const queryClient = new QueryClient();
 
 const wagmiConfig = createConfig({
-  chains: [baseSepolia],
+  chains: [base],
   connectors: [
     coinbaseWallet({
       appName: 'DarkForest Arena',
@@ -18,7 +18,7 @@ const wagmiConfig = createConfig({
     }),
   ],
   transports: {
-    [baseSepolia.id]: http(),
+    [base.id]: http(),
   },
 });
 
@@ -27,7 +27,7 @@ export default function Providers({ children }: { children: ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <OnchainKitProvider
-          chain={baseSepolia}
+          chain={base}
           miniKit={{ enabled: true }}
         >
           {children}

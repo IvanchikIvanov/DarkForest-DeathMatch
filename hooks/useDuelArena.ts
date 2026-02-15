@@ -2,7 +2,7 @@
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, type Address } from 'viem';
-import { baseSepolia } from 'wagmi/chains';
+import { base } from 'wagmi/chains';
 
 // DuelArena contract ABI (minimal, only the functions we use)
 const DUEL_ARENA_ABI = [
@@ -97,7 +97,7 @@ const DUEL_ARENA_ABI = [
   },
 ] as const;
 
-// Contract address from env - deploy on Base Sepolia first, then mainnet
+// Contract address from env - deployed on Base mainnet
 const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '') as Address;
 
 export const MIN_BET = parseEther('0.001');
@@ -122,7 +122,7 @@ export function useDuelArena() {
         functionName: 'createRoom',
         args: [betAmount],
         value: betAmount,
-        chain: baseSepolia,
+        chain: base,
         account,
       });
       return hash;
@@ -141,7 +141,7 @@ export function useDuelArena() {
         functionName: 'joinRoom',
         args: [BigInt(roomId)],
         value: betAmount,
-        chain: baseSepolia,
+        chain: base,
         account,
       });
       return hash;
@@ -159,7 +159,7 @@ export function useDuelArena() {
         abi: DUEL_ARENA_ABI,
         functionName: 'finishGame',
         args: [BigInt(roomId), winner],
-        chain: baseSepolia,
+        chain: base,
         account,
       });
       return hash;
@@ -177,7 +177,7 @@ export function useDuelArena() {
         abi: DUEL_ARENA_ABI,
         functionName: 'claimReward',
         args: [BigInt(roomId)],
-        chain: baseSepolia,
+        chain: base,
         account,
       });
       return hash;
