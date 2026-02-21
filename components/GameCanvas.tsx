@@ -1043,7 +1043,7 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Players — Detailed Cyber Warriors
+    // Draw Players — High-End Cyberpunk Procedural Warriors
     Object.values(state.players).forEach(p => {
       if (!p.active) return;
       const isMe = p.playerId === playerIdRef.current;
@@ -1053,418 +1053,610 @@ const GameCanvas: React.FC = () => {
       const hasSword = (p as any).hasSword;
       const hasBomb = (p as any).hasBomb;
 
-      // Animation calculations
+      // Animation calculations & Physics
       const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
-      const isMoving = velMag > 15;
-      const walkCycle = timeRef.current * 10; // leg/arm animation speed
-      const breathe = Math.sin(timeRef.current * 2) * 0.8; // idle breathing
-      const bobY = isMoving ? Math.sin(walkCycle) * 2.5 : breathe; // body bob
-      const legSwing = isMoving ? Math.sin(walkCycle) * 0.55 : 0; // leg swing angle
-      const armSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.4 : Math.sin(timeRef.current * 1.5) * 0.08;
-
-      // Color palette
-      const primary = isMe ? '#0ff' : '#ff1744';
-      const primaryDark = isMe ? '#0088aa' : '#aa0022';
-      const primaryGlow = isMe ? 'rgba(0,255,255,' : 'rgba(255,23,68,';
-      const armorBase = isMe ? '#1a3a4a' : '#3a1a1a';
-      const armorMid = isMe ? '#0d2833' : '#2d0d0d';
-      const armorLight = isMe ? '#2a5a6a' : '#5a2a2a';
-      const eyeColor = isMe ? '#0ff' : '#ff1744';
-      const capeColor = isMe ? '#0088aa' : '#8b0000';
-      const capeTip = isMe ? '#00cccc' : '#cc0022';
+      const isMoving = velMag > 5;
+      const walkCycle = timeRef.current * 14; // Faster run cycle
+      const breathe = Math.sin(timeRef.current * 2.5) * 1.5; // active breathing
+      const bobY = isMoving ? Math.abs(Math.sin(walkCycle * 0.5)) * -4 : breathe; // Dynamic running bob
+      const legSwing = isMoving ? Math.sin(walkCycle) * 0.7 : Math.sin(timeRef.current) * 0.1;
+      const armSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.6 : Math.sin(timeRef.current * 1.5) * 0.1;
+      
+      // Advanced Color Palette
+      const primary = isMe ? '#00e5ff' : '#ff003c'; // Brighter neon
+      const primaryGlow = isMe ? 'rgba(0,229,255,' : 'rgba(255,0,60,';
+      const armorDark = isMe ? '#0a192f' : '#2f0a12';
+      const armorMid = isMe ? '#112240' : '#40111a';
+      const armorLight = isMe ? '#233554' : '#54232a';
+      const armorAccent = isMe ? '#64ffda' : '#ff3366';
+      
+      const visorColor = isMe ? '#e6f1ff' : '#ffe6e6';
+      const energyCore = isMe ? '#64ffda' : '#ff3366';
 
       ctx.save();
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate(p.angle || 0);
 
-      // === GROUND SHADOW ===
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      // === DYNAMIC GROUND SHADOW ===
+      ctx.fillStyle = `rgba(0,0,0,${isMoving ? 0.2 : 0.4})`;
       ctx.beginPath();
-      ctx.ellipse(0, r + 8, r * 1.2, 5, 0, 0, Math.PI * 2);
+      // Shadow scales based on vertical bob
+      const shadowScale = 1 - (bobY / 10);
+      ctx.ellipse(0, r + 12, r * 1.3 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // === DODGE EFFECT — afterimage ===
-      if (p.isDodging) {
-        ctx.globalAlpha = 0.25;
+      // === MOTION TRAILS (If moving fast) ===
+      if (isMoving && velMag > 10) {
+        ctx.globalAlpha = 0.3;
+        ctx.shadowColor = primary;
+        ctx.shadowBlur = 10;
         ctx.fillStyle = primary;
         ctx.beginPath();
-        ctx.arc(-15, 0, r * 0.9, 0, Math.PI * 2);
+        ctx.moveTo(-15, r);
+        ctx.lineTo(-25, r + 10);
+        ctx.lineTo(-5, r + 5);
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(-30, 0, r * 0.6, 0, Math.PI * 2);
+        ctx.moveTo(15, r);
+        ctx.lineTo(25, r + 10);
+        ctx.lineTo(5, r + 5);
         ctx.fill();
         ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
       }
 
-      // Apply body bob
+      // === DODGE EFFECT — energetic afterimages ===
+      if (p.isDodging) {
+        ctx.globalAlpha = 0.4;
+        ctx.shadowColor = primary;
+        ctx.shadowBlur = 20;
+        
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.ellipse(-20, 0, r * 1.1, r * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = armorAccent;
+        ctx.beginPath();
+        ctx.ellipse(-40, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+
+      // Apply body bounce/bob
       ctx.translate(0, bobY);
 
-      // === CAPE / CLOAK (behind body) ===
+      // === ENERGY SCARF / PLASMA CAPE (behind body) ===
       ctx.save();
-      const capeWave = Math.sin(timeRef.current * 3 + 1) * 0.15;
-      const capeFlutter = isMoving ? Math.sin(walkCycle * 0.7) * 0.2 : capeWave;
+      const capeWave = Math.sin(timeRef.current * 5) * 0.2;
+      const capeFlutter = isMoving ? Math.sin(walkCycle * 0.8) * 0.3 : capeWave;
       ctx.rotate(Math.PI + capeFlutter);
-      ctx.beginPath();
-      ctx.moveTo(-8, 0);
-      ctx.quadraticCurveTo(-12, 18 + Math.sin(timeRef.current * 4) * 3, -6, 32);
-      ctx.quadraticCurveTo(0, 36 + Math.sin(timeRef.current * 3.5) * 2, 6, 32);
-      ctx.quadraticCurveTo(12, 18 + Math.sin(timeRef.current * 4.5) * 3, 8, 0);
-      ctx.closePath();
-      ctx.fillStyle = capeColor;
-      ctx.fill();
-      // Cape edge highlight
-      ctx.strokeStyle = capeTip;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
+      
+      // Plasma cape gradient
+      const capeGrad = ctx.createLinearGradient(0, 0, 0, 50);
+      capeGrad.addColorStop(0, armorDark);
+      capeGrad.addColorStop(0.5, armorMid);
+      capeGrad.addColorStop(1, primary);
 
-      // === LEGS (behind body) ===
-      // Left leg
-      ctx.save();
-      ctx.translate(-6, r * 0.4);
-      ctx.rotate(legSwing);
-      // Thigh
-      ctx.fillStyle = armorMid;
-      ctx.fillRect(-4, 0, 8, 14);
-      // Knee joint
-      ctx.fillStyle = primary;
-      ctx.fillRect(-2, 12, 4, 3);
-      // Shin
-      ctx.fillStyle = armorBase;
-      ctx.fillRect(-3, 14, 7, 12);
-      // Boot
-      ctx.fillStyle = '#111';
-      ctx.fillRect(-4, 24, 10, 5);
-      ctx.fillStyle = primary;
-      ctx.fillRect(-4, 24, 10, 2); // Glowing boot trim
-      ctx.restore();
-
-      // Right leg
-      ctx.save();
-      ctx.translate(6, r * 0.4);
-      ctx.rotate(-legSwing);
-      ctx.fillStyle = armorMid;
-      ctx.fillRect(-4, 0, 8, 14);
-      ctx.fillStyle = primary;
-      ctx.fillRect(-2, 12, 4, 3);
-      ctx.fillStyle = armorBase;
-      ctx.fillRect(-3, 14, 7, 12);
-      ctx.fillStyle = '#111';
-      ctx.fillRect(-4, 24, 10, 5);
-      ctx.fillStyle = primary;
-      ctx.fillRect(-4, 24, 10, 2);
-      ctx.restore();
-
-      // === BODY / TORSO (armor) ===
       ctx.shadowColor = primary;
-      ctx.shadowBlur = 12;
-
-      // Torso - armored chest plate
-      ctx.fillStyle = armorBase;
+      ctx.shadowBlur = 15;
       ctx.beginPath();
-      ctx.moveTo(-r * 0.7, -r * 0.3);
-      ctx.lineTo(-r * 0.8, r * 0.5);
-      ctx.lineTo(r * 0.8, r * 0.5);
-      ctx.lineTo(r * 0.7, -r * 0.3);
+      ctx.moveTo(-10, 0);
+      // Dynamic flowing control points
+      ctx.bezierCurveTo(-15, 20 + Math.sin(timeRef.current * 6) * 4, -8, 35, -2, 45);
+      ctx.bezierCurveTo(4, 48 + Math.sin(timeRef.current * 5) * 3, 10, 35, 12, 18 + Math.sin(timeRef.current * 7) * 4);
+      ctx.lineTo(10, 0);
+      ctx.closePath();
+      ctx.fillStyle = capeGrad;
+      ctx.fill();
+      
+      // Cape energy lines
+      ctx.strokeStyle = armorAccent;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-5, 5);
+      ctx.bezierCurveTo(-8, 20, -2, 35, 0, 42);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      // === CYBERNETIC LEGS ===
+      const drawLeg = (offsetX: number, angle: number, isRight: boolean) => {
+        ctx.save();
+        ctx.translate(offsetX, r * 0.3);
+        ctx.rotate(angle);
+        
+        // Upper thigh armor
+        const thighGrad = ctx.createLinearGradient(-5, 0, 5, 0);
+        thighGrad.addColorStop(0, armorDark);
+        thighGrad.addColorStop(0.5, armorLight);
+        thighGrad.addColorStop(1, armorMid);
+        ctx.fillStyle = thighGrad;
+        
+        ctx.beginPath();
+        ctx.moveTo(-5, -2);
+        ctx.lineTo(5, -2);
+        ctx.lineTo(4, 15);
+        ctx.lineTo(-4, 15);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Mechanical Knee joint (glowing)
+        ctx.shadowColor = primary;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = armorDark;
+        ctx.beginPath();
+        ctx.arc(0, 15, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.arc(0, 15, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Lower shin armor
+        ctx.fillStyle = armorMid;
+        ctx.beginPath();
+        ctx.moveTo(-4, 15);
+        ctx.lineTo(4, 15);
+        ctx.lineTo(3, 28);
+        ctx.lineTo(-3, 28);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Shin neon accent
+        ctx.strokeStyle = armorAccent;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 18);
+        ctx.lineTo(0, 26);
+        ctx.stroke();
+        
+        // Heavy Boot
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.moveTo(-5, 28);
+        ctx.lineTo(5, 28);
+        ctx.lineTo(6, 34);
+        ctx.lineTo(7, 34); // toe
+        ctx.lineTo(-5, 34); // heel
+        ctx.closePath();
+        ctx.fill();
+        // Boot sole glow
+        ctx.fillStyle = primary;
+        ctx.fillRect(-5, 33, 12, 1.5);
+
+        ctx.restore();
+      };
+
+      drawLeg(-7, legSwing, false);   // Left leg
+      drawLeg(7, -legSwing, true);    // Right leg
+
+      // === HIGH-TECH TORSO ARMOR ===
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 8;
+      
+      // Core torso gradient
+      const torsoGrad = ctx.createLinearGradient(-r, 0, r, 0);
+      torsoGrad.addColorStop(0, armorDark);
+      torsoGrad.addColorStop(0.3, armorMid);
+      torsoGrad.addColorStop(0.5, armorLight);
+      torsoGrad.addColorStop(0.7, armorMid);
+      torsoGrad.addColorStop(1, armorDark);
+
+      // Angled Chest Plate
+      ctx.fillStyle = torsoGrad;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.8, -r * 0.4); // Top left
+      ctx.lineTo(r * 0.8, -r * 0.4);  // Top right
+      ctx.lineTo(r * 0.9, r * 0.2);   // Mid right
+      ctx.lineTo(r * 0.5, r * 0.5);   // Bottom right angle
+      ctx.lineTo(-r * 0.5, r * 0.5);  // Bottom left angle
+      ctx.lineTo(-r * 0.9, r * 0.2);  // Mid left
       ctx.closePath();
       ctx.fill();
 
-      // Chest plate center panel
+      // Cybernetic plating details (Abs/Stomach)
+      ctx.fillStyle = armorDark;
+      ctx.fillRect(-6, 0, 12, r * 0.4);
       ctx.fillStyle = armorMid;
-      ctx.fillRect(-6, -r * 0.2, 12, r * 0.6);
+      ctx.fillRect(-4, 2, 8, 4);
+      ctx.fillRect(-4, 8, 8, 4);
 
-      // Chest plate neon lines
+      // Chest paneling lines
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.5, -r * 0.2);
+      ctx.lineTo(0, 0);
+      ctx.lineTo(r * 0.5, -r * 0.2);
+      ctx.stroke();
+
+      // Glowing power lines on armor
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 10;
       ctx.strokeStyle = primary;
       ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.6 + Math.sin(timeRef.current * 3) * 0.2;
-      // V-line on chest
+      ctx.globalAlpha = 0.7 + Math.sin(timeRef.current * 4) * 0.3; // Pulsing
+      // V-shaped reactor housing
       ctx.beginPath();
-      ctx.moveTo(0, -r * 0.25);
-      ctx.lineTo(-8, r * 0.15);
-      ctx.moveTo(0, -r * 0.25);
-      ctx.lineTo(8, r * 0.15);
-      ctx.stroke();
-      // Horizontal chest line
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.55, 0);
-      ctx.lineTo(r * 0.55, 0);
+      ctx.moveTo(-10, -r * 0.1);
+      ctx.lineTo(0, r * 0.1);
+      ctx.lineTo(10, -r * 0.1);
       ctx.stroke();
       ctx.globalAlpha = 1;
-
-      // Belt
-      ctx.fillStyle = '#111';
-      ctx.fillRect(-r * 0.7, r * 0.3, r * 1.4, 5);
-      ctx.fillStyle = primary;
-      ctx.fillRect(-3, r * 0.3, 6, 5); // Belt buckle glow
-
-      // Shoulder pads
-      ctx.fillStyle = armorLight;
-      // Left shoulder
-      ctx.beginPath();
-      ctx.arc(-r * 0.75, -r * 0.15, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = primary;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      // Right shoulder
-      ctx.beginPath();
-      ctx.arc(r * 0.75, -r * 0.15, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
       ctx.shadowBlur = 0;
 
-      // === LEFT ARM (non-weapon) ===
-      ctx.save();
-      ctx.translate(-r * 0.75, -r * 0.05);
-      ctx.rotate(armSwing);
+      // Heavy Utility Belt
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(-r * 0.75, r * 0.45, r * 1.5, 6);
+      // Belt pouches
       ctx.fillStyle = armorMid;
-      ctx.fillRect(-4, 0, 8, 16);
-      // Forearm
-      ctx.fillStyle = armorBase;
-      ctx.fillRect(-3, 14, 7, 12);
-      // Glove
-      ctx.fillStyle = '#111';
-      ctx.fillRect(-4, 24, 9, 5);
-      // Fist
-      ctx.fillStyle = armorMid;
-      ctx.beginPath();
-      ctx.arc(0, 30, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      ctx.fillRect(-12, r * 0.43, 6, 8);
+      ctx.fillRect(6, r * 0.43, 6, 8);
+      // Belt buckle (Energy Cell)
+      ctx.fillStyle = armorLight;
+      ctx.fillRect(-4, r * 0.42, 8, 10);
+      ctx.fillStyle = energyCore;
+      ctx.fillRect(-2, r * 0.45, 4, 4);
 
-      // === WEAPON ARM (right) ===
-      const itemSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.25 : Math.sin(timeRef.current * 1.5) * 0.06;
+
+      // === ARMS & SHOULDERS ===
+      
+      // Massive Shoulder Pauldrons
+      const drawPauldron = (isRight: boolean) => {
+        const sign = isRight ? 1 : -1;
+        ctx.fillStyle = armorMid;
+        ctx.beginPath();
+        // Spiked geometric shoulder
+        ctx.moveTo(sign * r * 0.6, -r * 0.5);
+        ctx.lineTo(sign * r * 1.1, -r * 0.3);
+        ctx.lineTo(sign * r * 0.9, r * 0.1);
+        ctx.lineTo(sign * r * 0.5, 0);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Pauldron glowing trim
+        ctx.strokeStyle = armorAccent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(sign * r * 0.6, -r * 0.5);
+        ctx.lineTo(sign * r * 1.1, -r * 0.3);
+        ctx.stroke();
+      };
+      
+      const drawArm = (offsetX: number, angle: number, isRight: boolean) => {
+        ctx.save();
+        ctx.translate(offsetX, -r * 0.15);
+        ctx.rotate(angle);
+        
+        // Bicep
+        ctx.fillStyle = armorDark;
+        ctx.fillRect(-4, 0, 8, 12);
+        
+        // Mechanical Elbow
+        ctx.fillStyle = armorMid;
+        ctx.beginPath();
+        ctx.arc(0, 12, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Armored Forearm (wider)
+        ctx.fillStyle = armorLight;
+        ctx.beginPath();
+        ctx.moveTo(-5, 12);
+        ctx.lineTo(5, 12);
+        ctx.lineTo(4, 26);
+        ctx.lineTo(-4, 26);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Forearm power line
+        ctx.fillStyle = primary;
+        ctx.fillRect(-1, 14, 2, 8);
+        
+        // Cybernetic Hand/Glove
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(-4, 26, 8, 6);
+        // Knuckles
+        ctx.fillStyle = armorMid;
+        ctx.fillRect(-5, 28, 10, 3);
+        
+        ctx.restore();
+      };
+
+      // Draw Pauldrons (above arms, below head)
+      drawPauldron(false);
+      drawPauldron(true);
+
+      // Left Arm (Idle/Swing)
+      drawArm(-r * 0.85, armSwing, false);
+
+      // === RIGHT ARM / WEAPONS ===
+      const itemSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.3 : Math.sin(timeRef.current * 2) * 0.05;
 
       if (hasGun) {
         ctx.save();
-        ctx.translate(r * 0.75, -r * 0.05);
-        ctx.rotate(itemSwing * 0.5);
-        // Arm
+        ctx.translate(r * 0.85, -r * 0.15);
+        ctx.rotate(itemSwing * 0.5); // Stiffer arm when holding gun
+        
+        // Upper arm & elbow
+        ctx.fillStyle = armorDark;
+        ctx.fillRect(-4, 0, 8, 10);
         ctx.fillStyle = armorMid;
-        ctx.fillRect(-4, 0, 8, 16);
-        ctx.fillStyle = armorBase;
-        ctx.fillRect(-3, 14, 7, 10);
-        // Gun
+        ctx.beginPath(); ctx.arc(0, 10, 4, 0, Math.PI*2); ctx.fill();
+        
+        // Forearm aiming forward
         ctx.save();
-        ctx.translate(0, 24);
-        ctx.rotate(-Math.PI / 2 + itemSwing);
-        ctx.fillStyle = '#fbbf24';
-        ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 8;
-        ctx.fillRect(0, -4, 30, 8);
-        ctx.fillRect(-4, -4, 10, 18);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(0, -4, 30, 8);
-        // Muzzle flash hint
-        ctx.fillStyle = `rgba(251,191,36,${0.3 + Math.sin(timeRef.current * 12) * 0.2})`;
+        ctx.translate(0, 10);
+        ctx.rotate(-Math.PI / 2 + itemSwing * 0.2); // Point gun forward
+        
+        ctx.fillStyle = armorLight;
+        ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,0); ctx.lineTo(3,14); ctx.lineTo(-3,14); ctx.closePath(); ctx.fill();
+        
+        // Hand
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(-3, 14, 6, 5);
+
+        // === HEAVY CYBER PISTOL ===
+        ctx.save();
+        ctx.translate(0, 18);
+        
+        // Gun Body (Angular)
+        ctx.fillStyle = '#222';
         ctx.beginPath();
-        ctx.arc(32, 0, 4, 0, Math.PI * 2);
+        ctx.moveTo(-6, -4);
+        ctx.lineTo(25, -4); // Barrel length
+        ctx.lineTo(32, 2);  // Angled muzzle
+        ctx.lineTo(25, 4);
+        ctx.lineTo(-4, 4);
+        ctx.closePath();
         ctx.fill();
+        
+        // Weapon glowing energy chamber
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#00ffff';
+        ctx.fillRect(5, -2, 10, 3);
         ctx.shadowBlur = 0;
-        ctx.restore();
-        ctx.restore();
+        
+        // Grip & Trigger guard
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-4, 4, 6, 12);
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(2, 4, 6, 4);
+        
+        // Muzzle flash / Heat
+        ctx.globalAlpha = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
+        ctx.beginPath(); ctx.arc(33, -1, 4, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+        
+        ctx.restore(); // out of gun space
+        ctx.restore(); // out of forearm space
+        ctx.restore(); // out of arm space
+        
       } else if (hasSword) {
         ctx.save();
-        ctx.translate(r * 0.75, -r * 0.15);
+        ctx.translate(r * 0.85, -r * 0.15);
+        ctx.rotate(itemSwing); // Sword swings with running
+        
         // Arm
-        ctx.fillStyle = armorMid;
-        ctx.fillRect(-4, 0, 8, 14);
-        ctx.fillStyle = armorBase;
-        ctx.fillRect(-3, 12, 7, 10);
-        // Sword
+        ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
+        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI*2); ctx.fill();
+        
         ctx.save();
-        ctx.translate(0, 22);
+        ctx.translate(0, 12);
+        
+        // Attack logic
         if (p.isAttacking) {
-          const progress = 1 - (p.attackTimer / 0.2);
-          const swingAngle = -Math.PI / 2 + (progress * Math.PI);
+          const progress = 1 - ((p as any).attackTimer / 0.2); // 0 to 1
+          const swingAngle = -Math.PI / 1.2 + (progress * Math.PI * 1.5); // Wide fierce arc
           ctx.rotate(swingAngle);
-          // Swing trail
-          ctx.globalAlpha = 0.3;
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 6;
+          
+          // Sick Energy Trail
+          ctx.globalAlpha = 0.4 * (1 - progress);
+          ctx.shadowColor = armorAccent;
+          ctx.shadowBlur = 15;
+          ctx.strokeStyle = armorAccent;
+          ctx.lineWidth = 15;
+          ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.arc(0, 0, 50, -Math.PI / 3, Math.PI / 3);
+          ctx.arc(0, 0, 45, -Math.PI, 0);
           ctx.stroke();
           ctx.globalAlpha = 1;
-        } else {
-          ctx.rotate(-Math.PI / 4 + itemSwing);
-        }
-        ctx.fillStyle = '#e5e7eb';
-        ctx.fillRect(-3, -40, 6, 60);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(-1, -38, 2, 52);
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(-10, 14, 20, 5);
-        ctx.fillStyle = '#52525b';
-        ctx.fillRect(-3, 19, 6, 10);
-        ctx.restore();
-        ctx.restore();
-
-        // Swing arc in player space
-        if (p.isAttacking) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-          ctx.lineWidth = 3;
-          ctx.shadowColor = '#fff';
-          ctx.shadowBlur = 6;
-          ctx.beginPath();
-          ctx.arc(0, 0, 50, -Math.PI / 2, Math.PI / 3);
-          ctx.stroke();
           ctx.shadowBlur = 0;
+        } else {
+          ctx.rotate(-Math.PI / 6); // Resting position
         }
+        
+        // Forearm
+        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,0); ctx.lineTo(3,14); ctx.lineTo(-3,14); ctx.closePath(); ctx.fill();
+        // Hand
+        ctx.fillStyle = '#050505'; ctx.fillRect(-3, 14, 6, 5);
+        
+        // === PLASMA SWORD ===
+        ctx.save();
+        ctx.translate(0, 18);
+        
+        // Hilt
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-2, -5, 4, 15);
+        // Guard (V-shape)
+        ctx.fillStyle = armorMid;
+        ctx.beginPath(); ctx.moveTo(-10, 10); ctx.lineTo(0, -2); ctx.lineTo(10, 10); ctx.lineTo(0, 5); ctx.closePath(); ctx.fill();
+        
+        // Plasma Blade
+        ctx.shadowColor = armorAccent;
+        ctx.shadowBlur = 20;
+        const bladeGrad = ctx.createLinearGradient(0, -60, 0, -5);
+        bladeGrad.addColorStop(0, '#ffffff'); // White hot tip
+        bladeGrad.addColorStop(0.2, armorAccent);
+        bladeGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        
+        ctx.fillStyle = bladeGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, -65); // Sharp tip
+        ctx.lineTo(4, -5);  // Base right
+        ctx.lineTo(-4, -5); // Base left
+        ctx.closePath();
+        ctx.fill();
+        
+        // Solid core
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.moveTo(0, -60); ctx.lineTo(1, -5); ctx.lineTo(-1, -5); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.shadowBlur = 0;
+        
+        ctx.restore(); // sword space
+        ctx.restore(); // forearm space
+        ctx.restore(); // arm space
+
       } else if (hasBomb) {
         ctx.save();
-        ctx.translate(r * 0.75, -r * 0.05);
+        ctx.translate(r * 0.85, -r * 0.15);
         ctx.rotate(itemSwing);
-        ctx.fillStyle = armorMid;
-        ctx.fillRect(-4, 0, 8, 16);
-        ctx.fillStyle = armorBase;
-        ctx.fillRect(-3, 14, 7, 10);
-        // Bomb in hand
+        
+        ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
+        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4,12); ctx.lineTo(4,12); ctx.lineTo(3,26); ctx.lineTo(-3,26); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#050505'; ctx.fillRect(-3, 26, 6, 5);
+        
+        // Glowing Cyber-Bomb in hand
         ctx.save();
-        ctx.translate(0, 28);
-        ctx.fillStyle = '#1f2937';
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(0, 0, 12, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#374151';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Fuse
-        ctx.strokeStyle = '#9ca3af';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(8, -6);
-        ctx.lineTo(14, -14);
-        ctx.stroke();
-        const sparkI = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
-        ctx.fillStyle = `rgba(249,115,22,${sparkI})`;
-        ctx.beginPath();
-        ctx.arc(14, -14, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.restore();
-        ctx.restore();
-      } else {
-        // Unarmed right arm
-        ctx.save();
-        ctx.translate(r * 0.75, -r * 0.05);
-        ctx.rotate(-armSwing);
-        ctx.fillStyle = armorMid;
-        ctx.fillRect(-4, 0, 8, 16);
-        ctx.fillStyle = armorBase;
-        ctx.fillRect(-3, 14, 7, 12);
+        ctx.translate(0, 32);
+        ctx.shadowColor = '#ff6b00';
+        ctx.shadowBlur = 15;
+        
         ctx.fillStyle = '#111';
-        ctx.fillRect(-4, 24, 9, 5);
-        ctx.fillStyle = armorMid;
-        ctx.beginPath();
-        ctx.arc(0, 30, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // === HEAD ===
-      ctx.save();
-      ctx.translate(0, -r * 0.6);
-
-      // Helmet base
-      ctx.fillStyle = armorBase;
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.65, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Helmet top crest
-      ctx.fillStyle = armorLight;
-      ctx.beginPath();
-      ctx.moveTo(-2, -r * 0.65);
-      ctx.lineTo(0, -r * 0.9);
-      ctx.lineTo(2, -r * 0.65);
-      ctx.closePath();
-      ctx.fill();
-      // Crest glow
-      ctx.fillStyle = primary;
-      ctx.fillRect(-1, -r * 0.88, 2, 6);
-
-      // Visor area (dark slit)
-      ctx.fillStyle = '#0a0a0a';
-      const visorW = r * 0.9;
-      const visorH = r * 0.3;
-      ctx.fillRect(-visorW / 2, -visorH / 2 + 1, visorW, visorH);
-
-      // EYES — glowing dots in visor
-      const blinkCycle = Math.sin(timeRef.current * 0.5);
-      const isBlinking = blinkCycle > 0.97; // Blink every ~6 sec
-      const eyeScale = isBlinking ? 0.1 : 1;
-      const eyePulse = 0.8 + Math.sin(timeRef.current * 4) * 0.2;
-
-      if (!isBlinking) {
-        ctx.shadowColor = eyeColor;
-        ctx.shadowBlur = 10 * eyePulse;
-        ctx.fillStyle = eyeColor;
-        // Left eye
-        ctx.beginPath();
-        ctx.ellipse(-5, 1, 3 * eyeScale, 2.5 * eyeScale, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Right eye
-        ctx.beginPath();
-        ctx.ellipse(5, 1, 3 * eyeScale, 2.5 * eyeScale, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Eye glint
+        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+        
+        // Bomb tech lines
+        ctx.strokeStyle = '#ff6b00';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 10); ctx.stroke();
+        
+        // Core glowing
         ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(-4, 0, 1, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(6, 0, 1, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+        
         ctx.shadowBlur = 0;
+        ctx.restore();
+        ctx.restore();
       } else {
-        // Blinking — thin line
-        ctx.strokeStyle = eyeColor;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(-7, 1);
-        ctx.lineTo(-3, 1);
-        ctx.moveTo(3, 1);
-        ctx.lineTo(7, 1);
-        ctx.stroke();
+        // Unarmed Right Arm
+        drawArm(r * 0.85, -armSwing, true);
       }
 
-      // Helmet chin guard
+
+      // === HELMET / HEAD ===
+      ctx.save();
+      // Head bounce is slightly offset from body bounce for overlaps
+      ctx.translate(0, -r * 0.45 - (isMoving ? Math.sin(walkCycle * 0.5) * 2 : 0));
+      
+      // Neck seal
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(-6, -5, 12, 8);
+
+      // Main Helmet Dome (Sleek and angular)
       ctx.fillStyle = armorMid;
       ctx.beginPath();
-      ctx.moveTo(-r * 0.5, visorH / 2 + 1);
-      ctx.lineTo(-r * 0.35, r * 0.45);
-      ctx.lineTo(r * 0.35, r * 0.45);
-      ctx.lineTo(r * 0.5, visorH / 2 + 1);
+      ctx.moveTo(-r * 0.6, 5);
+      ctx.lineTo(r * 0.6, 5);
+      ctx.lineTo(r * 0.55, -r * 0.4);
+      ctx.lineTo(r * 0.3, -r * 0.8);
+      ctx.lineTo(-r * 0.3, -r * 0.8);
+      ctx.lineTo(-r * 0.55, -r * 0.4);
       ctx.closePath();
       ctx.fill();
 
-      // Helmet side lines (decorative)
-      ctx.strokeStyle = primary;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.5;
+      // Top ridge (Mohawk style vents)
+      ctx.fillStyle = armorDark;
       ctx.beginPath();
-      ctx.moveTo(-r * 0.55, -r * 0.2);
-      ctx.lineTo(-r * 0.6, r * 0.1);
-      ctx.moveTo(r * 0.55, -r * 0.2);
-      ctx.lineTo(r * 0.6, r * 0.1);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      ctx.restore(); // head
-
-      // === ENERGY CORE (chest glow) ===
-      const corePulse = 0.4 + Math.sin(timeRef.current * 3) * 0.3;
-      ctx.fillStyle = `${primaryGlow}${corePulse})`;
-      ctx.shadowColor = primary;
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.arc(0, -r * 0.05, 3, 0, Math.PI * 2);
+      ctx.moveTo(-4, -r * 0.8);
+      ctx.lineTo(4, -r * 0.8);
+      ctx.lineTo(2, -r * 0.95);
+      ctx.lineTo(-2, -r * 0.95);
+      ctx.closePath();
       ctx.fill();
+
+      // === VISOR (Glowing LED strip) ===
+      ctx.shadowColor = primary;
+      ctx.shadowBlur = 15;
+      
+      const visorW = r * 1.1;
+      const visorH = r * 0.25;
+      
+      // Visor dark background
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(-visorW/2, -r*0.1);
+      ctx.lineTo(visorW/2, -r*0.1);
+      ctx.lineTo(visorW/2 - 2, r*0.15);
+      ctx.lineTo(-visorW/2 + 2, r*0.15);
+      ctx.closePath();
+      ctx.fill();
+
+      // Glowing optic line (Knight Rider style scan or straight pulse)
+      // Scanner dot moves back and forth
+      const scanPos = Math.sin(timeRef.current * 4) * (visorW/2 - 4);
+      
+      ctx.fillStyle = primary;
+      // Base faint line
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(-visorW/2 + 2, -1, visorW - 4, 2);
+      
+      // Bright scanning dot
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = visorColor;
+      ctx.beginPath();
+      ctx.arc(scanPos, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Additional optic dots (spider eyes)
+      ctx.fillStyle = primary;
+      ctx.beginPath(); ctx.arc(-visorW/3, -3, 1.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(visorW/3, -3, 1.5, 0, Math.PI*2); ctx.fill();
+
+      ctx.shadowBlur = 0;
+
+      // Jaw/Filter guards
+      ctx.fillStyle = armorLight;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.4, r * 0.15);
+      ctx.lineTo(r * 0.4, r * 0.15);
+      ctx.lineTo(r * 0.2, r * 0.35);
+      ctx.lineTo(-r * 0.2, r * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Breathing vents
+      ctx.strokeStyle = '#050505';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-5, r*0.25); ctx.lineTo(5, r*0.25); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-3, r*0.3); ctx.lineTo(3, r*0.3); ctx.stroke();
+
+      ctx.restore(); // helmet space
+
+      // === BACKPACK / POWER SUPPLY ===
+      ctx.fillStyle = armorDark;
+      ctx.fillRect(-r * 0.4, -r * 0.6, r * 0.8, r * 0.5);
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(-r * 0.3, -r * 0.55, r * 0.6, r * 0.4);
+      
+      // Backpack exhaust/glow
+      ctx.shadowColor = energyCore;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = energyCore;
+      ctx.globalAlpha = 0.6 + Math.sin(timeRef.current * 8) * 0.4; // Fast pulsing
+      ctx.fillRect(-8, -r * 0.5, 4, r * 0.3);
+      ctx.fillRect(4, -r * 0.5, 4, r * 0.3);
+      ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
 
       ctx.restore(); // End player rotated transform
