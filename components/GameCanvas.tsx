@@ -153,13 +153,15 @@ const GameCanvas: React.FC = () => {
   };
 
   const createRoomWithBet = async () => {
-    if (!selectedBet) {
+    if (!selectedBet && walletConnected) {
       showToast('Please select bet amount', 'error');
       return;
     }
 
     setIsCreatingRoom(true);
     let onChainRoomId: number = -1;
+    let actualBet = selectedBet || 0n; // Default to 0 for walletless
+
     try {
       if (walletConnected) {
         // Read the nextRoomId BEFORE creating, so we know what ID the contract will assign
@@ -169,48 +171,51 @@ const GameCanvas: React.FC = () => {
           console.log('On-chain room ID will be:', onChainRoomId);
         }
 
-        const txHash = await contractCreateRoom(selectedBet);
+        const txHash = await contractCreateRoom(actualBet);
         if (txHash) {
           console.log('Room created on-chain, tx:', txHash);
           setRoomContractId(onChainRoomId);
         }
       }
-      setRoomBetAmount(selectedBet);
-
-      const newRoomId = generateRoomId();
-      setRoomId(newRoomId);
-      partyClientRef.current?.connect(newRoomId);
-
-      // Send room info to game server (which notifies lobby) — include contractRoomId
-      const betDisplay = formatEther(selectedBet) + ' ETH';
-      const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
-      setTimeout(() => {
-        partyClientRef.current?.sendRoomInfo(
-          Number(selectedBet),
-          betDisplay,
-          creatorName,
-          onChainRoomId
-        );
-      }, 500);
-
-      setIsCreatingRoom(false);
     } catch (error: any) {
-      console.error('Error creating room:', error);
-      setIsCreatingRoom(false);
-      const newRoomId = generateRoomId();
-      setRoomId(newRoomId);
-      partyClientRef.current?.connect(newRoomId);
+      console.error('Error with on-chain room creation:', error);
+      // If contract creation fails but they wanted to create one, we should probably stop
+      // unless we want to let them fall back to off-chain automatically.
+      // For now, let's just log and continue to create the off-chain room for testing.
+      showToast('Wallet transaction failed, creating off-chain test room', 'error');
     }
+
+    // Always create the PartyKit room (off-chain) so players can test
+    setRoomBetAmount(actualBet);
+    const newRoomId = generateRoomId();
+    setRoomId(newRoomId);
+    partyClientRef.current?.connect(newRoomId);
+
+    // Send room info to game server (which notifies lobby) — include contractRoomId
+    const betDisplay = walletConnected ? formatEther(actualBet) + ' ETH' : 'TESTING (No Wager)';
+    const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
+
+    setTimeout(() => {
+      partyClientRef.current?.sendRoomInfo(
+        Number(actualBet),
+        betDisplay,
+        creatorName,
+        onChainRoomId
+      );
+    }, 500);
+
+    setIsCreatingRoom(false);
   };
 
   // Join an open room from the lobby list
   const joinOpenRoom = async (room: OpenRoom) => {
     setIsJoiningRoom(true);
-    try {
-      const betAmount = BigInt(room.betAmount);
-      setRoomBetAmount(betAmount);
-      setSelectedBet(betAmount);
 
+    const betAmount = BigInt(room.betAmount);
+    setRoomBetAmount(betAmount);
+    setSelectedBet(betAmount);
+
+    try {
       if (walletConnected && room.contractRoomId !== undefined && room.contractRoomId >= 0) {
         setRoomContractId(room.contractRoomId);
         const txHash = await contractJoinRoom(room.contractRoomId, betAmount);
@@ -218,18 +223,16 @@ const GameCanvas: React.FC = () => {
           console.log('Joined room on-chain, tx:', txHash, 'contractRoomId:', room.contractRoomId);
         }
       }
-
-      setRoomId(room.roomId);
-      partyClientRef.current?.connect(room.roomId);
-
-      setIsJoiningRoom(false);
     } catch (error: any) {
-      console.error('Error joining room:', error);
-      setIsJoiningRoom(false);
-      // Still join the PartyKit room even if contract fails
-      setRoomId(room.roomId);
-      partyClientRef.current?.connect(room.roomId);
+      console.error('Error joining on-chain room:', error);
+      showToast('Wallet transaction failed, joining off-chain for testing', 'error');
     }
+
+    // Always join the PartyKit room even if contract fails or wallet is not connected
+    setRoomId(room.roomId);
+    partyClientRef.current?.connect(room.roomId);
+
+    setIsJoiningRoom(false);
   };
 
   const startHostedGame = () => {
@@ -635,18 +638,18 @@ const GameCanvas: React.FC = () => {
 
     healthPickups.forEach((hp: any) => {
       if (!hp || !hp.active) return;
-      
+
       ctx.save();
       ctx.translate(hp.pos.x, hp.pos.y);
-      
+
       // Floating bob animation
       const bobY = Math.sin(timeRef.current * 3) * 5;
       ctx.translate(0, bobY);
-      
+
       // Strong pulsing glow effect
       const pulse = 1 + Math.sin(timeRef.current * 4) * 0.2;
       ctx.scale(pulse, pulse);
-      
+
       // Outer glow ring - multiple layers
       ctx.shadowColor = '#00ff00';
       ctx.shadowBlur = 50;
@@ -654,27 +657,27 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(0, 0, 70, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Mid glow
       ctx.shadowBlur = 30;
       ctx.fillStyle = 'rgba(0, 255, 0, 0.4)';
       ctx.beginPath();
       ctx.arc(0, 0, 45, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Inner bright circle
       ctx.shadowBlur = 15;
       ctx.fillStyle = '#00ff00';
       ctx.beginPath();
       ctx.arc(0, 0, 30, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // White center
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(0, 0, 20, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Green cross (health symbol) - with 3D effect
       // Shadow
       ctx.fillStyle = '#006600';
@@ -688,7 +691,7 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = '#88ff88';
       ctx.fillRect(-38, -6, 76, 4);
       ctx.fillRect(-6, -38, 4, 76);
-      
+
       // Sparkle effects
       const sparkleAngle = timeRef.current * 2;
       for (let i = 0; i < 4; i++) {
@@ -700,7 +703,7 @@ const GameCanvas: React.FC = () => {
         ctx.arc(sx, sy, 3, 0, Math.PI * 2);
         ctx.fill();
       }
-      
+
       ctx.shadowBlur = 0;
       ctx.restore();
     });
@@ -714,7 +717,7 @@ const GameCanvas: React.FC = () => {
       // Floating animation
       const bobY = Math.sin(timeRef.current * 2.5 + 1) * 4;
       ctx.translate(0, bobY);
-      
+
       // Slow rotation
       const rot = Math.sin(timeRef.current * 1.5) * 0.15;
       ctx.rotate(rot);
@@ -730,7 +733,7 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(0, 0, 50, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Mid glow
       ctx.shadowBlur = 25;
       ctx.fillStyle = 'rgba(251, 191, 36, 0.35)';
@@ -761,7 +764,7 @@ const GameCanvas: React.FC = () => {
       // Trigger
       ctx.fillStyle = '#78350f';
       ctx.fillRect(3, 8, 4, 8);
-      
+
       // Decorative lines
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1;
@@ -819,7 +822,7 @@ const GameCanvas: React.FC = () => {
       // Floating animation
       const bobY = Math.sin(timeRef.current * 2.8 + 2) * 5;
       ctx.translate(0, bobY);
-      
+
       // Slow rotation
       const rot = Math.sin(timeRef.current * 1.2) * 0.2;
       ctx.rotate(Math.PI / 4 + rot);
@@ -835,7 +838,7 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(0, 0, 55, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Mid glow
       ctx.shadowBlur = 30;
       ctx.fillStyle = 'rgba(229, 231, 235, 0.35)';
@@ -855,7 +858,7 @@ const GameCanvas: React.FC = () => {
       // Blade edge highlight
       ctx.fillStyle = '#d4d4d8';
       ctx.fillRect(2, -34, 2, 65);
-      
+
       // Blade fuller (blood groove)
       ctx.fillStyle = '#a1a1aa';
       ctx.fillRect(-1, -30, 2, 50);
@@ -870,7 +873,7 @@ const GameCanvas: React.FC = () => {
       // Guard highlight
       ctx.fillStyle = '#fcd34d';
       ctx.fillRect(-14, 32, 28, 2);
-      
+
       // Handle/Grip
       ctx.fillStyle = '#52525b';
       ctx.fillRect(-4, 38, 8, 18);
@@ -927,7 +930,7 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(0, 0, 55, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Mid glow
       ctx.shadowBlur = 30;
       ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
@@ -946,13 +949,13 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(0, 0, 26, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Bomb highlight (top left)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
       ctx.beginPath();
       ctx.arc(-10, -10, 12, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Bomb stripe
       ctx.fillStyle = '#ef4444';
       ctx.fillRect(-26, -2, 52, 8);
@@ -988,7 +991,7 @@ const GameCanvas: React.FC = () => {
       const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
       const sparkX = 20 + Math.sin(timeRef.current * 3) * 3;
       const sparkY = -35 + Math.cos(timeRef.current * 2.5) * 3;
-      
+
       // Outer spark glow
       ctx.shadowColor = '#ff6b00';
       ctx.shadowBlur = 15;
@@ -996,13 +999,13 @@ const GameCanvas: React.FC = () => {
       ctx.beginPath();
       ctx.arc(sparkX, sparkY, 10, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Main spark
       ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
       ctx.beginPath();
       ctx.arc(sparkX, sparkY, 6, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Inner bright core
       ctx.fillStyle = '#fff';
       ctx.beginPath();
@@ -1061,7 +1064,7 @@ const GameCanvas: React.FC = () => {
       const bobY = isMoving ? Math.abs(Math.sin(walkCycle * 0.5)) * -4 : breathe; // Dynamic running bob
       const legSwing = isMoving ? Math.sin(walkCycle) * 0.7 : Math.sin(timeRef.current) * 0.1;
       const armSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.6 : Math.sin(timeRef.current * 1.5) * 0.1;
-      
+
       // Advanced Color Palette
       const primary = isMe ? '#00e5ff' : '#ff003c'; // Brighter neon
       const primaryGlow = isMe ? 'rgba(0,229,255,' : 'rgba(255,0,60,';
@@ -1069,7 +1072,7 @@ const GameCanvas: React.FC = () => {
       const armorMid = isMe ? '#112240' : '#40111a';
       const armorLight = isMe ? '#233554' : '#54232a';
       const armorAccent = isMe ? '#64ffda' : '#ff3366';
-      
+
       const visorColor = isMe ? '#e6f1ff' : '#ffe6e6';
       const energyCore = isMe ? '#64ffda' : '#ff3366';
 
@@ -1110,17 +1113,17 @@ const GameCanvas: React.FC = () => {
         ctx.globalAlpha = 0.4;
         ctx.shadowColor = primary;
         ctx.shadowBlur = 20;
-        
+
         ctx.fillStyle = primary;
         ctx.beginPath();
         ctx.ellipse(-20, 0, r * 1.1, r * 0.6, 0, 0, Math.PI * 2);
         ctx.fill();
-        
+
         ctx.fillStyle = armorAccent;
         ctx.beginPath();
         ctx.ellipse(-40, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
         ctx.fill();
-        
+
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
       }
@@ -1133,7 +1136,7 @@ const GameCanvas: React.FC = () => {
       const capeWave = Math.sin(timeRef.current * 5) * 0.2;
       const capeFlutter = isMoving ? Math.sin(walkCycle * 0.8) * 0.3 : capeWave;
       ctx.rotate(Math.PI + capeFlutter);
-      
+
       // Plasma cape gradient
       const capeGrad = ctx.createLinearGradient(0, 0, 0, 50);
       capeGrad.addColorStop(0, armorDark);
@@ -1151,7 +1154,7 @@ const GameCanvas: React.FC = () => {
       ctx.closePath();
       ctx.fillStyle = capeGrad;
       ctx.fill();
-      
+
       // Cape energy lines
       ctx.strokeStyle = armorAccent;
       ctx.lineWidth = 1.5;
@@ -1167,14 +1170,14 @@ const GameCanvas: React.FC = () => {
         ctx.save();
         ctx.translate(offsetX, r * 0.3);
         ctx.rotate(angle);
-        
+
         // Upper thigh armor
         const thighGrad = ctx.createLinearGradient(-5, 0, 5, 0);
         thighGrad.addColorStop(0, armorDark);
         thighGrad.addColorStop(0.5, armorLight);
         thighGrad.addColorStop(1, armorMid);
         ctx.fillStyle = thighGrad;
-        
+
         ctx.beginPath();
         ctx.moveTo(-5, -2);
         ctx.lineTo(5, -2);
@@ -1182,7 +1185,7 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(-4, 15);
         ctx.closePath();
         ctx.fill();
-        
+
         // Mechanical Knee joint (glowing)
         ctx.shadowColor = primary;
         ctx.shadowBlur = 6;
@@ -1195,7 +1198,7 @@ const GameCanvas: React.FC = () => {
         ctx.arc(0, 15, 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
-        
+
         // Lower shin armor
         ctx.fillStyle = armorMid;
         ctx.beginPath();
@@ -1205,7 +1208,7 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(-3, 28);
         ctx.closePath();
         ctx.fill();
-        
+
         // Shin neon accent
         ctx.strokeStyle = armorAccent;
         ctx.lineWidth = 1;
@@ -1213,7 +1216,7 @@ const GameCanvas: React.FC = () => {
         ctx.moveTo(0, 18);
         ctx.lineTo(0, 26);
         ctx.stroke();
-        
+
         // Heavy Boot
         ctx.fillStyle = '#111';
         ctx.beginPath();
@@ -1237,7 +1240,7 @@ const GameCanvas: React.FC = () => {
       // === HIGH-TECH TORSO ARMOR ===
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 8;
-      
+
       // Core torso gradient
       const torsoGrad = ctx.createLinearGradient(-r, 0, r, 0);
       torsoGrad.addColorStop(0, armorDark);
@@ -1304,7 +1307,7 @@ const GameCanvas: React.FC = () => {
 
 
       // === ARMS & SHOULDERS ===
-      
+
       // Massive Shoulder Pauldrons
       const drawPauldron = (isRight: boolean) => {
         const sign = isRight ? 1 : -1;
@@ -1317,7 +1320,7 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(sign * r * 0.5, 0);
         ctx.closePath();
         ctx.fill();
-        
+
         // Pauldron glowing trim
         ctx.strokeStyle = armorAccent;
         ctx.lineWidth = 1.5;
@@ -1326,22 +1329,22 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(sign * r * 1.1, -r * 0.3);
         ctx.stroke();
       };
-      
+
       const drawArm = (offsetX: number, angle: number, isRight: boolean) => {
         ctx.save();
         ctx.translate(offsetX, -r * 0.15);
         ctx.rotate(angle);
-        
+
         // Bicep
         ctx.fillStyle = armorDark;
         ctx.fillRect(-4, 0, 8, 12);
-        
+
         // Mechanical Elbow
         ctx.fillStyle = armorMid;
         ctx.beginPath();
         ctx.arc(0, 12, 4, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Armored Forearm (wider)
         ctx.fillStyle = armorLight;
         ctx.beginPath();
@@ -1351,18 +1354,18 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(-4, 26);
         ctx.closePath();
         ctx.fill();
-        
+
         // Forearm power line
         ctx.fillStyle = primary;
         ctx.fillRect(-1, 14, 2, 8);
-        
+
         // Cybernetic Hand/Glove
         ctx.fillStyle = '#050505';
         ctx.fillRect(-4, 26, 8, 6);
         // Knuckles
         ctx.fillStyle = armorMid;
         ctx.fillRect(-5, 28, 10, 3);
-        
+
         ctx.restore();
       };
 
@@ -1380,21 +1383,21 @@ const GameCanvas: React.FC = () => {
         ctx.save();
         ctx.translate(r * 0.85, -r * 0.15);
         ctx.rotate(itemSwing * 0.5); // Stiffer arm when holding gun
-        
+
         // Upper arm & elbow
         ctx.fillStyle = armorDark;
         ctx.fillRect(-4, 0, 8, 10);
         ctx.fillStyle = armorMid;
-        ctx.beginPath(); ctx.arc(0, 10, 4, 0, Math.PI*2); ctx.fill();
-        
+        ctx.beginPath(); ctx.arc(0, 10, 4, 0, Math.PI * 2); ctx.fill();
+
         // Forearm aiming forward
         ctx.save();
         ctx.translate(0, 10);
         ctx.rotate(-Math.PI / 2 + itemSwing * 0.2); // Point gun forward
-        
+
         ctx.fillStyle = armorLight;
-        ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,0); ctx.lineTo(3,14); ctx.lineTo(-3,14); ctx.closePath(); ctx.fill();
-        
+        ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.lineTo(3, 14); ctx.lineTo(-3, 14); ctx.closePath(); ctx.fill();
+
         // Hand
         ctx.fillStyle = '#050505';
         ctx.fillRect(-3, 14, 6, 5);
@@ -1402,7 +1405,7 @@ const GameCanvas: React.FC = () => {
         // === HEAVY CYBER PISTOL ===
         ctx.save();
         ctx.translate(0, 18);
-        
+
         // Gun Body (Angular)
         ctx.fillStyle = '#222';
         ctx.beginPath();
@@ -1413,49 +1416,49 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(-4, 4);
         ctx.closePath();
         ctx.fill();
-        
+
         // Weapon glowing energy chamber
         ctx.shadowColor = '#00ffff';
         ctx.shadowBlur = 8;
         ctx.fillStyle = '#00ffff';
         ctx.fillRect(5, -2, 10, 3);
         ctx.shadowBlur = 0;
-        
+
         // Grip & Trigger guard
         ctx.fillStyle = '#111';
         ctx.fillRect(-4, 4, 6, 12);
         ctx.strokeStyle = '#444';
         ctx.lineWidth = 2;
         ctx.strokeRect(2, 4, 6, 4);
-        
+
         // Muzzle flash / Heat
         ctx.globalAlpha = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
         ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
-        ctx.beginPath(); ctx.arc(33, -1, 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(33, -1, 4, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
-        
+
         ctx.restore(); // out of gun space
         ctx.restore(); // out of forearm space
         ctx.restore(); // out of arm space
-        
+
       } else if (hasSword) {
         ctx.save();
         ctx.translate(r * 0.85, -r * 0.15);
         ctx.rotate(itemSwing); // Sword swings with running
-        
+
         // Arm
         ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
-        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI*2); ctx.fill();
-        
+        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI * 2); ctx.fill();
+
         ctx.save();
         ctx.translate(0, 12);
-        
+
         // Attack logic
         if (p.isAttacking) {
           const progress = 1 - ((p as any).attackTimer / 0.2); // 0 to 1
           const swingAngle = -Math.PI / 1.2 + (progress * Math.PI * 1.5); // Wide fierce arc
           ctx.rotate(swingAngle);
-          
+
           // Sick Energy Trail
           ctx.globalAlpha = 0.4 * (1 - progress);
           ctx.shadowColor = armorAccent;
@@ -1471,23 +1474,23 @@ const GameCanvas: React.FC = () => {
         } else {
           ctx.rotate(-Math.PI / 6); // Resting position
         }
-        
+
         // Forearm
-        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,0); ctx.lineTo(3,14); ctx.lineTo(-3,14); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.lineTo(3, 14); ctx.lineTo(-3, 14); ctx.closePath(); ctx.fill();
         // Hand
         ctx.fillStyle = '#050505'; ctx.fillRect(-3, 14, 6, 5);
-        
+
         // === PLASMA SWORD ===
         ctx.save();
         ctx.translate(0, 18);
-        
+
         // Hilt
         ctx.fillStyle = '#111';
         ctx.fillRect(-2, -5, 4, 15);
         // Guard (V-shape)
         ctx.fillStyle = armorMid;
         ctx.beginPath(); ctx.moveTo(-10, 10); ctx.lineTo(0, -2); ctx.lineTo(10, 10); ctx.lineTo(0, 5); ctx.closePath(); ctx.fill();
-        
+
         // Plasma Blade
         ctx.shadowColor = armorAccent;
         ctx.shadowBlur = 20;
@@ -1495,7 +1498,7 @@ const GameCanvas: React.FC = () => {
         bladeGrad.addColorStop(0, '#ffffff'); // White hot tip
         bladeGrad.addColorStop(0.2, armorAccent);
         bladeGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        
+
         ctx.fillStyle = bladeGrad;
         ctx.beginPath();
         ctx.moveTo(0, -65); // Sharp tip
@@ -1503,7 +1506,7 @@ const GameCanvas: React.FC = () => {
         ctx.lineTo(-4, -5); // Base left
         ctx.closePath();
         ctx.fill();
-        
+
         // Solid core
         ctx.fillStyle = '#ffffff';
         ctx.globalAlpha = 0.8;
@@ -1511,7 +1514,7 @@ const GameCanvas: React.FC = () => {
         ctx.globalAlpha = 1;
 
         ctx.shadowBlur = 0;
-        
+
         ctx.restore(); // sword space
         ctx.restore(); // forearm space
         ctx.restore(); // arm space
@@ -1520,31 +1523,31 @@ const GameCanvas: React.FC = () => {
         ctx.save();
         ctx.translate(r * 0.85, -r * 0.15);
         ctx.rotate(itemSwing);
-        
+
         ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
-        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4,12); ctx.lineTo(4,12); ctx.lineTo(3,26); ctx.lineTo(-3,26); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4, 12); ctx.lineTo(4, 12); ctx.lineTo(3, 26); ctx.lineTo(-3, 26); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#050505'; ctx.fillRect(-3, 26, 6, 5);
-        
+
         // Glowing Cyber-Bomb in hand
         ctx.save();
         ctx.translate(0, 32);
         ctx.shadowColor = '#ff6b00';
         ctx.shadowBlur = 15;
-        
+
         ctx.fillStyle = '#111';
-        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-        
+        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+
         // Bomb tech lines
         ctx.strokeStyle = '#ff6b00';
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 10); ctx.stroke();
-        
+
         // Core glowing
         ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
-        
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+
         ctx.shadowBlur = 0;
         ctx.restore();
         ctx.restore();
@@ -1558,7 +1561,7 @@ const GameCanvas: React.FC = () => {
       ctx.save();
       // Head bounce is slightly offset from body bounce for overlaps
       ctx.translate(0, -r * 0.45 - (isMoving ? Math.sin(walkCycle * 0.5) * 2 : 0));
-      
+
       // Neck seal
       ctx.fillStyle = '#050505';
       ctx.fillRect(-6, -5, 12, 8);
@@ -1588,40 +1591,40 @@ const GameCanvas: React.FC = () => {
       // === VISOR (Glowing LED strip) ===
       ctx.shadowColor = primary;
       ctx.shadowBlur = 15;
-      
+
       const visorW = r * 1.1;
       const visorH = r * 0.25;
-      
+
       // Visor dark background
       ctx.fillStyle = '#000';
       ctx.beginPath();
-      ctx.moveTo(-visorW/2, -r*0.1);
-      ctx.lineTo(visorW/2, -r*0.1);
-      ctx.lineTo(visorW/2 - 2, r*0.15);
-      ctx.lineTo(-visorW/2 + 2, r*0.15);
+      ctx.moveTo(-visorW / 2, -r * 0.1);
+      ctx.lineTo(visorW / 2, -r * 0.1);
+      ctx.lineTo(visorW / 2 - 2, r * 0.15);
+      ctx.lineTo(-visorW / 2 + 2, r * 0.15);
       ctx.closePath();
       ctx.fill();
 
       // Glowing optic line (Knight Rider style scan or straight pulse)
       // Scanner dot moves back and forth
-      const scanPos = Math.sin(timeRef.current * 4) * (visorW/2 - 4);
-      
+      const scanPos = Math.sin(timeRef.current * 4) * (visorW / 2 - 4);
+
       ctx.fillStyle = primary;
       // Base faint line
       ctx.globalAlpha = 0.4;
-      ctx.fillRect(-visorW/2 + 2, -1, visorW - 4, 2);
-      
+      ctx.fillRect(-visorW / 2 + 2, -1, visorW - 4, 2);
+
       // Bright scanning dot
       ctx.globalAlpha = 1;
       ctx.fillStyle = visorColor;
       ctx.beginPath();
       ctx.arc(scanPos, 0, 2, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Additional optic dots (spider eyes)
       ctx.fillStyle = primary;
-      ctx.beginPath(); ctx.arc(-visorW/3, -3, 1.5, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(visorW/3, -3, 1.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-visorW / 3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(visorW / 3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
 
       ctx.shadowBlur = 0;
 
@@ -1634,12 +1637,12 @@ const GameCanvas: React.FC = () => {
       ctx.lineTo(-r * 0.2, r * 0.35);
       ctx.closePath();
       ctx.fill();
-      
+
       // Breathing vents
       ctx.strokeStyle = '#050505';
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(-5, r*0.25); ctx.lineTo(5, r*0.25); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-3, r*0.3); ctx.lineTo(3, r*0.3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-5, r * 0.25); ctx.lineTo(5, r * 0.25); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-3, r * 0.3); ctx.lineTo(3, r * 0.3); ctx.stroke();
 
       ctx.restore(); // helmet space
 
@@ -1648,7 +1651,7 @@ const GameCanvas: React.FC = () => {
       ctx.fillRect(-r * 0.4, -r * 0.6, r * 0.8, r * 0.5);
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(-r * 0.3, -r * 0.55, r * 0.6, r * 0.4);
-      
+
       // Backpack exhaust/glow
       ctx.shadowColor = energyCore;
       ctx.shadowBlur = 8;
