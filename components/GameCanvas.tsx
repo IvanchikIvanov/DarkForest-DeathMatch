@@ -708,76 +708,108 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Gun Pickups - ENHANCED with detailed golden pistol
+    // drawPistol — Kenny-style huge revolver (item on ground or in hand)
+    const drawPistol = (angle: number, scale: number, isItem: boolean, t: number, showMuzzleFlash?: boolean) => {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.scale(scale, scale);
+
+      if (isItem) {
+        const glowSize = 35 + Math.sin(t * 5) * 8;
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(234, 88, 12, 0.3)');
+        gradient.addColorStop(1, 'rgba(234, 88, 12, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#000';
+      ctx.lineJoin = 'round';
+
+      // Grip
+      ctx.fillStyle = '#57534e';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-25, 0, 22, 55, [0, 0, 15, 15]);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-25, 0, 22, 55);
+      }
+      ctx.stroke();
+
+      // Barrel
+      ctx.fillStyle = '#a8a29e';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-30, -25, 100, 30, 5);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-30, -25, 100, 30);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#78716c';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-5, -28, 45, 36, 8);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-5, -28, 45, 36);
+      }
+      ctx.stroke();
+
+      // Cylinder (6 chambers)
+      ctx.fillStyle = '#44403c';
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(17 + Math.cos(a) * 10, -10 + Math.sin(a) * 10, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Sight
+      ctx.fillStyle = '#d6d3d1';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(40, -22, 100, 18, 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(40, -22, 100, 18);
+      }
+      ctx.stroke();
+
+      // Muzzle
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(135, -13, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (showMuzzleFlash) {
+        ctx.fillStyle = `rgba(251, 191, 36, ${0.6 + Math.sin(t * 30) * 0.4})`;
+        ctx.beginPath();
+        ctx.arc(155, -13, 25 + Math.sin(t * 20) * 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    // Draw Gun Pickups — Kenny-style pistol on ground with glow
     gunPickups.forEach((gp: any) => {
       if (!gp.active) return;
       ctx.save();
       ctx.translate(gp.pos.x, gp.pos.y);
 
-      // Floating animation
       const bobY = Math.sin(timeRef.current * 2.5 + 1) * 4;
       ctx.translate(0, bobY);
 
-      // Slow rotation
-      const rot = Math.sin(timeRef.current * 1.5) * 0.15;
-      ctx.rotate(rot);
+      const rot = Math.sin(timeRef.current * 1.2) * 0.15;
+      drawPistol(-Math.PI / 4 + rot, 0.4, true, timeRef.current);
 
-      // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
-      ctx.scale(pulse, pulse);
-
-      // Outer glow - multiple layers
-      ctx.shadowColor = '#fbbf24';
-      ctx.shadowBlur = 40;
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 50, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Mid glow
-      ctx.shadowBlur = 25;
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.35)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 35, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Gun body - detailed golden pistol
-      ctx.fillStyle = '#d97706';
-      // Barrel main
-      ctx.fillRect(-28, -10, 45, 14);
-      // Barrel highlight
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(-26, -8, 41, 4);
-      // Muzzle
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(17, -8, 8, 10);
-      // Grip
-      ctx.fillStyle = '#b45309';
-      ctx.fillRect(-8, 0, 18, 32);
-      ctx.fillRect(-6, 28, 14, 6);
-      // Trigger guard
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(5, 10, 10, 0, Math.PI);
-      ctx.stroke();
-      // Trigger
-      ctx.fillStyle = '#78350f';
-      ctx.fillRect(3, 8, 4, 8);
-
-      // Decorative lines
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(-28, -10, 45, 14);
-      ctx.strokeRect(-8, 0, 18, 32);
-
-      // Sparkle on gun
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.beginPath();
-      ctx.arc(-15, -3, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.shadowBlur = 0;
       ctx.restore();
     });
 
@@ -813,206 +845,249 @@ const GameCanvas: React.FC = () => {
       });
     }
 
-    // Draw Sword Pickups - ENHANCED with floating animation and sparkle
+    // drawSword — Kenny-style sword (item on ground or in hand)
+    const drawSword = (angle: number, scale: number, isItem: boolean, t: number) => {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.scale(scale, scale);
+
+      if (isItem) {
+        const glowSize = 40 + Math.sin(t * 5) * 10;
+        const gradient = ctx.createRadialGradient(0, -100, 0, 0, -100, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.3)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, -100, glowSize * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(-6, -10, 12, 40);
+      ctx.strokeRect(-6, -10, 12, 40);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-20, -10, 40, 8);
+      ctx.strokeRect(-20, -10, 40, 8);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.moveTo(-18, -10);
+      ctx.lineTo(18, -10);
+      ctx.lineTo(22, -220);
+      ctx.lineTo(0, -250);
+      ctx.lineTo(-22, -220);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(0, -240);
+      ctx.stroke();
+
+      ctx.restore();
+    };
+
+    // Draw Sword Pickups — Kenny-style sword lying on ground with glow
     swordPickups.forEach((sp: any) => {
       if (!sp.active) return;
       ctx.save();
       ctx.translate(sp.pos.x, sp.pos.y);
 
-      // Floating animation
       const bobY = Math.sin(timeRef.current * 2.8 + 2) * 5;
       ctx.translate(0, bobY);
 
-      // Slow rotation
       const rot = Math.sin(timeRef.current * 1.2) * 0.2;
-      ctx.rotate(Math.PI / 4 + rot);
+      drawSword(Math.PI / 4 + rot, 0.4, true, timeRef.current);
 
-      // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
-      ctx.scale(pulse, pulse);
-
-      // Outer glow - multiple layers
-      ctx.shadowColor = '#e5e7eb';
-      ctx.shadowBlur = 45;
-      ctx.fillStyle = 'rgba(229, 231, 235, 0.15)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 55, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Mid glow
-      ctx.shadowBlur = 30;
-      ctx.fillStyle = 'rgba(229, 231, 235, 0.35)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 40, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Sword blade - detailed
-      ctx.fillStyle = '#71717a';
-      ctx.fillRect(-6, -38, 12, 76); // Darker base
-      // Main blade
-      ctx.fillStyle = '#e5e7eb';
-      ctx.fillRect(-5, -36, 10, 72);
-      // Blade highlight (left side)
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-4, -34, 3, 65);
-      // Blade edge highlight
-      ctx.fillStyle = '#d4d4d8';
-      ctx.fillRect(2, -34, 2, 65);
-
-      // Blade fuller (blood groove)
-      ctx.fillStyle = '#a1a1aa';
-      ctx.fillRect(-1, -30, 2, 50);
-
-      // Guard - ornate crossguard
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(-18, 32, 36, 6);
-      // Guard decoration
-      ctx.fillStyle = '#92400e';
-      ctx.fillRect(-16, 31, 4, 8);
-      ctx.fillRect(12, 31, 4, 8);
-      // Guard highlight
-      ctx.fillStyle = '#fcd34d';
-      ctx.fillRect(-14, 32, 28, 2);
-
-      // Handle/Grip
-      ctx.fillStyle = '#52525b';
-      ctx.fillRect(-4, 38, 8, 18);
-      // Grip wrapping
-      ctx.fillStyle = '#3f3f46';
-      for (let i = 0; i < 4; i++) {
-        ctx.fillRect(-4, 40 + i * 4, 8, 2);
-      }
-      // Pommel
-      ctx.fillStyle = '#fbbf24';
-      ctx.beginPath();
-      ctx.arc(0, 58, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#92400e';
-      ctx.beginPath();
-      ctx.arc(0, 58, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Sparkle effects around sword
-      const sparkleAngle = timeRef.current * 1.5;
-      for (let i = 0; i < 3; i++) {
-        const angle = sparkleAngle + (i * Math.PI * 2 / 3);
-        const sx = Math.cos(angle) * 45;
-        const sy = Math.sin(angle) * 45;
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(timeRef.current * 4 + i) * 0.3})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 3 + i, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.shadowBlur = 0;
       ctx.restore();
     });
 
-    // Draw Bomb Pickups - ENHANCED with animated fuse and glow
+    // drawBomb — Kenny-style grenade (item on ground or in hand)
+    const drawBomb = (angle: number, scale: number, isItem: boolean, t: number) => {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.scale(scale, scale);
+
+      if (isItem) {
+        const glowSize = 30 + Math.sin(t * 5) * 5;
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+
+      // Fuse line
+      ctx.beginPath();
+      ctx.moveTo(0, -25);
+      ctx.quadraticCurveTo(10, -40, 20, -35);
+      ctx.stroke();
+
+      // Fuse spark (flickering)
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(20, -35, 4 + Math.sin(t * 15) * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bomb body
+      ctx.fillStyle = '#1c1917';
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Bomb neck
+      ctx.fillStyle = '#44403c';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-8, -28, 16, 8, 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-8, -28, 16, 8);
+      }
+      ctx.stroke();
+
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      ctx.arc(-8, -8, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    // drawChainsaw — Kenny-style chainsaw (item on ground or in hand)
+    const drawChainsaw = (angle: number, scale: number, isItem: boolean, t: number) => {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.scale(scale, scale);
+
+      if (isItem) {
+        const glowSize = 40 + Math.sin(t * 5) * 8;
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+        gradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.4)');
+        gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+      ctx.lineJoin = 'round';
+
+      // Red body
+      ctx.fillStyle = '#ef4444';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-40, -25, 50, 45, 8);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-40, -25, 50, 45);
+      }
+      ctx.stroke();
+
+      // Grip
+      ctx.fillStyle = '#1c1917';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-45, -20, 15, 25, 4);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-45, -20, 15, 25);
+      }
+      ctx.stroke();
+
+      // Engine arc
+      ctx.strokeStyle = '#44403c';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(-15, -25, 15, Math.PI, 0);
+      ctx.stroke();
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+
+      // Bar/guide
+      ctx.fillStyle = '#94a3b8';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(10, -18, 140, 25, 4);
+        ctx.fill();
+      } else {
+        ctx.fillRect(10, -18, 140, 25);
+      }
+      ctx.stroke();
+
+      // Chain teeth (animated)
+      const chainPos = (t * 40) % 20;
+      ctx.fillStyle = '#44403c';
+      for (let i = 0; i < 140; i += 20) {
+        ctx.beginPath();
+        ctx.moveTo(10 + i + chainPos, -20);
+        ctx.lineTo(15 + i + chainPos, -24);
+        ctx.lineTo(20 + i + chainPos, -20);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(10 + i + chainPos, 8);
+        ctx.lineTo(15 + i + chainPos, 12);
+        ctx.lineTo(20 + i + chainPos, 8);
+        ctx.fill();
+      }
+
+      // Engine circle
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(-15, -5, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+    };
+
+    // Draw Chainsaw Pickups — Kenny-style on ground with glow
+    const chainsawPickups = (state as any).chainsawPickups || [];
+    chainsawPickups.forEach((cp: any) => {
+      if (!cp.active) return;
+      ctx.save();
+      ctx.translate(cp.pos.x, cp.pos.y);
+
+      const bobY = Math.sin(timeRef.current * 2.5 + 4) * 4;
+      ctx.translate(0, bobY);
+
+      const rot = Math.sin(timeRef.current * 1.2) * 0.2;
+      drawChainsaw(-Math.PI / 6 + rot, 0.4, true, timeRef.current);
+
+      ctx.restore();
+    });
+
+    // Draw Bomb Pickups — Kenny-style grenade on ground with glow
     const bombPickups = (state as any).bombPickups || [];
     bombPickups.forEach((bp: any) => {
       if (!bp.active) return;
       ctx.save();
       ctx.translate(bp.pos.x, bp.pos.y);
 
-      // Floating animation
       const bobY = Math.sin(timeRef.current * 2.2 + 3) * 4;
       ctx.translate(0, bobY);
 
-      // Pulsing effect
-      const pulse = 1 + Math.sin(timeRef.current * 5) * 0.15;
-      ctx.scale(pulse, pulse);
+      drawBomb(0, 1, true, timeRef.current);
 
-      // Outer glow - multiple layers
-      ctx.shadowColor = '#f97316';
-      ctx.shadowBlur = 45;
-      ctx.fillStyle = 'rgba(249, 115, 22, 0.15)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 55, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Mid glow
-      ctx.shadowBlur = 30;
-      ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 40, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Bomb body - detailed
-      // Shadow
-      ctx.fillStyle = '#0f0f0f';
-      ctx.beginPath();
-      ctx.arc(3, 3, 27, 0, Math.PI * 2);
-      ctx.fill();
-      // Main body
-      ctx.fillStyle = '#1f2937';
-      ctx.beginPath();
-      ctx.arc(0, 0, 26, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Bomb highlight (top left)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.beginPath();
-      ctx.arc(-10, -10, 12, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Bomb stripe
-      ctx.fillStyle = '#ef4444';
-      ctx.fillRect(-26, -2, 52, 8);
-      ctx.fillStyle = '#fca5a5';
-      ctx.fillRect(-26, 0, 52, 2);
-
-      // Bomb neck
-      ctx.fillStyle = '#374151';
-      ctx.fillRect(-8, -32, 16, 10);
-
-      // Bomb outline
-      ctx.strokeStyle = '#4b5563';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 26, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Fuse
-      ctx.strokeStyle = '#9ca3af';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(0, -32);
-      ctx.quadraticCurveTo(10, -40, 20, -35);
-      ctx.stroke();
-
-      // Fuse knot
-      ctx.fillStyle = '#6b7280';
-      ctx.beginPath();
-      ctx.arc(0, -32, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Fuse spark (animated)
-      const sparkIntensity = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
-      const sparkX = 20 + Math.sin(timeRef.current * 3) * 3;
-      const sparkY = -35 + Math.cos(timeRef.current * 2.5) * 3;
-
-      // Outer spark glow
-      ctx.shadowColor = '#ff6b00';
-      ctx.shadowBlur = 15;
-      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity * 0.5})`;
-      ctx.beginPath();
-      ctx.arc(sparkX, sparkY, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Main spark
-      ctx.fillStyle = `rgba(249, 115, 22, ${sparkIntensity})`;
-      ctx.beginPath();
-      ctx.arc(sparkX, sparkY, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Inner bright core
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.shadowBlur = 0;
       ctx.restore();
     });
 
@@ -1046,623 +1121,162 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Players — High-End Cyberpunk Procedural Warriors
-    Object.values(state.players).forEach(p => {
-      if (!p.active) return;
-      const isMe = p.playerId === playerIdRef.current;
-      const r = p.radius; // 20
+    // Draw Players — Kenny the Rogue
+    const drawKenny = (p: any, t: number, isMe: boolean) => {
+      const r = p.radius;
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+
+      const bodyColor = isMe ? '#ea580c' : '#c2410c';
+      const faceColor = isMe ? '#7c2d12' : '#5c1d0c';
+
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 30, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.translate(0, -hop);
+      ctx.rotate(sideTilt);
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000';
+
+      // Boots
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.ellipse(-15, 15, 12, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(15, 15, 12, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Body
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(-24, -20, 48, 40, [18, 18, 5, 5]);
+      } else {
+        ctx.rect(-24, -20, 48, 40);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Head outline
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(0, -35, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Face
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.arc(0, -35, 30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = faceColor;
+      ctx.beginPath();
+      ctx.ellipse(0, -35, 22, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fecaca';
+      ctx.beginPath();
+      ctx.ellipse(0, -35, 18, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(-7, -38, 9, 11, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(7, -38, 9, 11, -0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-5, -38, 2, 0, Math.PI * 2);
+      ctx.arc(5, -38, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Left arm (hand)
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(-34, -5, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Right arm with weapon
+      ctx.save();
+      ctx.translate(34, -5);
+      ctx.rotate(swing);
+
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
       const hasGun = (p as any).hasGun;
       const hasSword = (p as any).hasSword;
+      const hasChainsaw = (p as any).hasChainsaw;
       const hasBomb = (p as any).hasBomb;
 
-      // Animation calculations & Physics
-      const velMag = Math.sqrt((p.vel?.x || 0) * (p.vel?.x || 0) + (p.vel?.y || 0) * (p.vel?.y || 0));
-      const isMoving = velMag > 5;
-      const walkCycle = timeRef.current * 14; // Faster run cycle
-      const breathe = Math.sin(timeRef.current * 2.5) * 1.5; // active breathing
-      const bobY = isMoving ? Math.abs(Math.sin(walkCycle * 0.5)) * -4 : breathe; // Dynamic running bob
-      const legSwing = isMoving ? Math.sin(walkCycle) * 0.7 : Math.sin(timeRef.current) * 0.1;
-      const armSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.6 : Math.sin(timeRef.current * 1.5) * 0.1;
+      if (hasGun) {
+        const pistolAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawPistol(pistolAngle, 0.6, false, t, p.isAttacking);
+      } else if (hasBomb) {
+        const bombScale = p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8;
+        drawBomb(0, bombScale, false, t);
+      } else if (hasChainsaw) {
+        const chainsawAngle = -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0);
+        drawChainsaw(chainsawAngle, 0.6, false, t);
+      } else if (hasSword) {
+        drawSword(swing, 1, false, t);
+        if (p.isAttacking) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+          ctx.lineWidth = 50;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2);
+          ctx.stroke();
+          ctx.lineWidth = 3;
+        }
+      } else {
+        // Unarmed — empty hand
+        ctx.fillStyle = '#78350f';
+        ctx.beginPath();
+        ctx.arc(0, 0, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
 
-      // Advanced Color Palette
-      const primary = isMe ? '#00e5ff' : '#ff003c'; // Brighter neon
-      const primaryGlow = isMe ? 'rgba(0,229,255,' : 'rgba(255,0,60,';
-      const armorDark = isMe ? '#0a192f' : '#2f0a12';
-      const armorMid = isMe ? '#112240' : '#40111a';
-      const armorLight = isMe ? '#233554' : '#54232a';
-      const armorAccent = isMe ? '#64ffda' : '#ff3366';
+      ctx.restore();
+    };
 
-      const visorColor = isMe ? '#e6f1ff' : '#ffe6e6';
-      const energyCore = isMe ? '#64ffda' : '#ff3366';
+    Object.values(state.players).forEach(p => {
+      if (!p.active) return;
+      const isMe = p.playerId === playerIdRef.current;
+      const r = p.radius;
+
+      const primary = isMe ? '#00e5ff' : '#ff003c';
 
       ctx.save();
       ctx.translate(p.pos.x, p.pos.y);
-      ctx.rotate(p.angle || 0);
-
-      // === DYNAMIC GROUND SHADOW ===
-      ctx.fillStyle = `rgba(0,0,0,${isMoving ? 0.2 : 0.4})`;
-      ctx.beginPath();
-      // Shadow scales based on vertical bob
-      const shadowScale = 1 - (bobY / 10);
-      ctx.ellipse(0, r + 12, r * 1.3 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // === MOTION TRAILS (If moving fast) ===
-      if (isMoving && velMag > 10) {
-        ctx.globalAlpha = 0.3;
-        ctx.shadowColor = primary;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.moveTo(-15, r);
-        ctx.lineTo(-25, r + 10);
-        ctx.lineTo(-5, r + 5);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(15, r);
-        ctx.lineTo(25, r + 10);
-        ctx.lineTo(5, r + 5);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-      }
-
-      // === DODGE EFFECT — energetic afterimages ===
-      if (p.isDodging) {
-        ctx.globalAlpha = 0.4;
-        ctx.shadowColor = primary;
-        ctx.shadowBlur = 20;
-
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.ellipse(-20, 0, r * 1.1, r * 0.6, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = armorAccent;
-        ctx.beginPath();
-        ctx.ellipse(-40, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-      }
-
-      // Apply body bounce/bob
-      ctx.translate(0, bobY);
-
-      // === ENERGY SCARF / PLASMA CAPE (behind body) ===
-      ctx.save();
-      const capeWave = Math.sin(timeRef.current * 5) * 0.2;
-      const capeFlutter = isMoving ? Math.sin(walkCycle * 0.8) * 0.3 : capeWave;
-      ctx.rotate(Math.PI + capeFlutter);
-
-      // Plasma cape gradient
-      const capeGrad = ctx.createLinearGradient(0, 0, 0, 50);
-      capeGrad.addColorStop(0, armorDark);
-      capeGrad.addColorStop(0.5, armorMid);
-      capeGrad.addColorStop(1, primary);
-
-      ctx.shadowColor = primary;
-      ctx.shadowBlur = 15;
-      ctx.beginPath();
-      ctx.moveTo(-10, 0);
-      // Dynamic flowing control points
-      ctx.bezierCurveTo(-15, 20 + Math.sin(timeRef.current * 6) * 4, -8, 35, -2, 45);
-      ctx.bezierCurveTo(4, 48 + Math.sin(timeRef.current * 5) * 3, 10, 35, 12, 18 + Math.sin(timeRef.current * 7) * 4);
-      ctx.lineTo(10, 0);
-      ctx.closePath();
-      ctx.fillStyle = capeGrad;
-      ctx.fill();
-
-      // Cape energy lines
-      ctx.strokeStyle = armorAccent;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-5, 5);
-      ctx.bezierCurveTo(-8, 20, -2, 35, 0, 42);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      ctx.rotate((p.angle ?? 0) + Math.PI / 2);
+      ctx.scale(r / 35, r / 35);
+      drawKenny(p, timeRef.current, isMe);
       ctx.restore();
-
-      // === CYBERNETIC LEGS ===
-      const drawLeg = (offsetX: number, angle: number, isRight: boolean) => {
-        ctx.save();
-        ctx.translate(offsetX, r * 0.3);
-        ctx.rotate(angle);
-
-        // Upper thigh armor
-        const thighGrad = ctx.createLinearGradient(-5, 0, 5, 0);
-        thighGrad.addColorStop(0, armorDark);
-        thighGrad.addColorStop(0.5, armorLight);
-        thighGrad.addColorStop(1, armorMid);
-        ctx.fillStyle = thighGrad;
-
-        ctx.beginPath();
-        ctx.moveTo(-5, -2);
-        ctx.lineTo(5, -2);
-        ctx.lineTo(4, 15);
-        ctx.lineTo(-4, 15);
-        ctx.closePath();
-        ctx.fill();
-
-        // Mechanical Knee joint (glowing)
-        ctx.shadowColor = primary;
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = armorDark;
-        ctx.beginPath();
-        ctx.arc(0, 15, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.arc(0, 15, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Lower shin armor
-        ctx.fillStyle = armorMid;
-        ctx.beginPath();
-        ctx.moveTo(-4, 15);
-        ctx.lineTo(4, 15);
-        ctx.lineTo(3, 28);
-        ctx.lineTo(-3, 28);
-        ctx.closePath();
-        ctx.fill();
-
-        // Shin neon accent
-        ctx.strokeStyle = armorAccent;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, 18);
-        ctx.lineTo(0, 26);
-        ctx.stroke();
-
-        // Heavy Boot
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.moveTo(-5, 28);
-        ctx.lineTo(5, 28);
-        ctx.lineTo(6, 34);
-        ctx.lineTo(7, 34); // toe
-        ctx.lineTo(-5, 34); // heel
-        ctx.closePath();
-        ctx.fill();
-        // Boot sole glow
-        ctx.fillStyle = primary;
-        ctx.fillRect(-5, 33, 12, 1.5);
-
-        ctx.restore();
-      };
-
-      drawLeg(-7, legSwing, false);   // Left leg
-      drawLeg(7, -legSwing, true);    // Right leg
-
-      // === HIGH-TECH TORSO ARMOR ===
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 8;
-
-      // Core torso gradient
-      const torsoGrad = ctx.createLinearGradient(-r, 0, r, 0);
-      torsoGrad.addColorStop(0, armorDark);
-      torsoGrad.addColorStop(0.3, armorMid);
-      torsoGrad.addColorStop(0.5, armorLight);
-      torsoGrad.addColorStop(0.7, armorMid);
-      torsoGrad.addColorStop(1, armorDark);
-
-      // Angled Chest Plate
-      ctx.fillStyle = torsoGrad;
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.8, -r * 0.4); // Top left
-      ctx.lineTo(r * 0.8, -r * 0.4);  // Top right
-      ctx.lineTo(r * 0.9, r * 0.2);   // Mid right
-      ctx.lineTo(r * 0.5, r * 0.5);   // Bottom right angle
-      ctx.lineTo(-r * 0.5, r * 0.5);  // Bottom left angle
-      ctx.lineTo(-r * 0.9, r * 0.2);  // Mid left
-      ctx.closePath();
-      ctx.fill();
-
-      // Cybernetic plating details (Abs/Stomach)
-      ctx.fillStyle = armorDark;
-      ctx.fillRect(-6, 0, 12, r * 0.4);
-      ctx.fillStyle = armorMid;
-      ctx.fillRect(-4, 2, 8, 4);
-      ctx.fillRect(-4, 8, 8, 4);
-
-      // Chest paneling lines
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.5, -r * 0.2);
-      ctx.lineTo(0, 0);
-      ctx.lineTo(r * 0.5, -r * 0.2);
-      ctx.stroke();
-
-      // Glowing power lines on armor
-      ctx.shadowColor = primary;
-      ctx.shadowBlur = 10;
-      ctx.strokeStyle = primary;
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.7 + Math.sin(timeRef.current * 4) * 0.3; // Pulsing
-      // V-shaped reactor housing
-      ctx.beginPath();
-      ctx.moveTo(-10, -r * 0.1);
-      ctx.lineTo(0, r * 0.1);
-      ctx.lineTo(10, -r * 0.1);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
-
-      // Heavy Utility Belt
-      ctx.fillStyle = '#0a0a0a';
-      ctx.fillRect(-r * 0.75, r * 0.45, r * 1.5, 6);
-      // Belt pouches
-      ctx.fillStyle = armorMid;
-      ctx.fillRect(-12, r * 0.43, 6, 8);
-      ctx.fillRect(6, r * 0.43, 6, 8);
-      // Belt buckle (Energy Cell)
-      ctx.fillStyle = armorLight;
-      ctx.fillRect(-4, r * 0.42, 8, 10);
-      ctx.fillStyle = energyCore;
-      ctx.fillRect(-2, r * 0.45, 4, 4);
-
-
-      // === ARMS & SHOULDERS ===
-
-      // Massive Shoulder Pauldrons
-      const drawPauldron = (isRight: boolean) => {
-        const sign = isRight ? 1 : -1;
-        ctx.fillStyle = armorMid;
-        ctx.beginPath();
-        // Spiked geometric shoulder
-        ctx.moveTo(sign * r * 0.6, -r * 0.5);
-        ctx.lineTo(sign * r * 1.1, -r * 0.3);
-        ctx.lineTo(sign * r * 0.9, r * 0.1);
-        ctx.lineTo(sign * r * 0.5, 0);
-        ctx.closePath();
-        ctx.fill();
-
-        // Pauldron glowing trim
-        ctx.strokeStyle = armorAccent;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(sign * r * 0.6, -r * 0.5);
-        ctx.lineTo(sign * r * 1.1, -r * 0.3);
-        ctx.stroke();
-      };
-
-      const drawArm = (offsetX: number, angle: number, isRight: boolean) => {
-        ctx.save();
-        ctx.translate(offsetX, -r * 0.15);
-        ctx.rotate(angle);
-
-        // Bicep
-        ctx.fillStyle = armorDark;
-        ctx.fillRect(-4, 0, 8, 12);
-
-        // Mechanical Elbow
-        ctx.fillStyle = armorMid;
-        ctx.beginPath();
-        ctx.arc(0, 12, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Armored Forearm (wider)
-        ctx.fillStyle = armorLight;
-        ctx.beginPath();
-        ctx.moveTo(-5, 12);
-        ctx.lineTo(5, 12);
-        ctx.lineTo(4, 26);
-        ctx.lineTo(-4, 26);
-        ctx.closePath();
-        ctx.fill();
-
-        // Forearm power line
-        ctx.fillStyle = primary;
-        ctx.fillRect(-1, 14, 2, 8);
-
-        // Cybernetic Hand/Glove
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(-4, 26, 8, 6);
-        // Knuckles
-        ctx.fillStyle = armorMid;
-        ctx.fillRect(-5, 28, 10, 3);
-
-        ctx.restore();
-      };
-
-      // Draw Pauldrons (above arms, below head)
-      drawPauldron(false);
-      drawPauldron(true);
-
-      // Left Arm (Idle/Swing)
-      drawArm(-r * 0.85, armSwing, false);
-
-      // === RIGHT ARM / WEAPONS ===
-      const itemSwing = isMoving ? Math.sin(walkCycle + Math.PI) * 0.3 : Math.sin(timeRef.current * 2) * 0.05;
-
-      if (hasGun) {
-        ctx.save();
-        ctx.translate(r * 0.85, -r * 0.15);
-        ctx.rotate(itemSwing * 0.5); // Stiffer arm when holding gun
-
-        // Upper arm & elbow
-        ctx.fillStyle = armorDark;
-        ctx.fillRect(-4, 0, 8, 10);
-        ctx.fillStyle = armorMid;
-        ctx.beginPath(); ctx.arc(0, 10, 4, 0, Math.PI * 2); ctx.fill();
-
-        // Forearm aiming forward
-        ctx.save();
-        ctx.translate(0, 10);
-        ctx.rotate(-Math.PI / 2 + itemSwing * 0.2); // Point gun forward
-
-        ctx.fillStyle = armorLight;
-        ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.lineTo(3, 14); ctx.lineTo(-3, 14); ctx.closePath(); ctx.fill();
-
-        // Hand
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(-3, 14, 6, 5);
-
-        // === HEAVY CYBER PISTOL ===
-        ctx.save();
-        ctx.translate(0, 18);
-
-        // Gun Body (Angular)
-        ctx.fillStyle = '#222';
-        ctx.beginPath();
-        ctx.moveTo(-6, -4);
-        ctx.lineTo(25, -4); // Barrel length
-        ctx.lineTo(32, 2);  // Angled muzzle
-        ctx.lineTo(25, 4);
-        ctx.lineTo(-4, 4);
-        ctx.closePath();
-        ctx.fill();
-
-        // Weapon glowing energy chamber
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 8;
-        ctx.fillStyle = '#00ffff';
-        ctx.fillRect(5, -2, 10, 3);
-        ctx.shadowBlur = 0;
-
-        // Grip & Trigger guard
-        ctx.fillStyle = '#111';
-        ctx.fillRect(-4, 4, 6, 12);
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(2, 4, 6, 4);
-
-        // Muzzle flash / Heat
-        ctx.globalAlpha = 0.5 + Math.sin(timeRef.current * 15) * 0.5;
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
-        ctx.beginPath(); ctx.arc(33, -1, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-
-        ctx.restore(); // out of gun space
-        ctx.restore(); // out of forearm space
-        ctx.restore(); // out of arm space
-
-      } else if (hasSword) {
-        ctx.save();
-        ctx.translate(r * 0.85, -r * 0.15);
-        ctx.rotate(itemSwing); // Sword swings with running
-
-        // Arm
-        ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
-        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI * 2); ctx.fill();
-
-        ctx.save();
-        ctx.translate(0, 12);
-
-        // Attack logic
-        if (p.isAttacking) {
-          const progress = 1 - ((p as any).attackTimer / 0.2); // 0 to 1
-          const swingAngle = -Math.PI / 1.2 + (progress * Math.PI * 1.5); // Wide fierce arc
-          ctx.rotate(swingAngle);
-
-          // Sick Energy Trail
-          ctx.globalAlpha = 0.4 * (1 - progress);
-          ctx.shadowColor = armorAccent;
-          ctx.shadowBlur = 15;
-          ctx.strokeStyle = armorAccent;
-          ctx.lineWidth = 15;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.arc(0, 0, 45, -Math.PI, 0);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.shadowBlur = 0;
-        } else {
-          ctx.rotate(-Math.PI / 6); // Resting position
-        }
-
-        // Forearm
-        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.lineTo(3, 14); ctx.lineTo(-3, 14); ctx.closePath(); ctx.fill();
-        // Hand
-        ctx.fillStyle = '#050505'; ctx.fillRect(-3, 14, 6, 5);
-
-        // === PLASMA SWORD ===
-        ctx.save();
-        ctx.translate(0, 18);
-
-        // Hilt
-        ctx.fillStyle = '#111';
-        ctx.fillRect(-2, -5, 4, 15);
-        // Guard (V-shape)
-        ctx.fillStyle = armorMid;
-        ctx.beginPath(); ctx.moveTo(-10, 10); ctx.lineTo(0, -2); ctx.lineTo(10, 10); ctx.lineTo(0, 5); ctx.closePath(); ctx.fill();
-
-        // Plasma Blade
-        ctx.shadowColor = armorAccent;
-        ctx.shadowBlur = 20;
-        const bladeGrad = ctx.createLinearGradient(0, -60, 0, -5);
-        bladeGrad.addColorStop(0, '#ffffff'); // White hot tip
-        bladeGrad.addColorStop(0.2, armorAccent);
-        bladeGrad.addColorStop(1, 'rgba(255,255,255,0)');
-
-        ctx.fillStyle = bladeGrad;
-        ctx.beginPath();
-        ctx.moveTo(0, -65); // Sharp tip
-        ctx.lineTo(4, -5);  // Base right
-        ctx.lineTo(-4, -5); // Base left
-        ctx.closePath();
-        ctx.fill();
-
-        // Solid core
-        ctx.fillStyle = '#ffffff';
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath(); ctx.moveTo(0, -60); ctx.lineTo(1, -5); ctx.lineTo(-1, -5); ctx.closePath(); ctx.fill();
-        ctx.globalAlpha = 1;
-
-        ctx.shadowBlur = 0;
-
-        ctx.restore(); // sword space
-        ctx.restore(); // forearm space
-        ctx.restore(); // arm space
-
-      } else if (hasBomb) {
-        ctx.save();
-        ctx.translate(r * 0.85, -r * 0.15);
-        ctx.rotate(itemSwing);
-
-        ctx.fillStyle = armorDark; ctx.fillRect(-4, 0, 8, 12);
-        ctx.fillStyle = armorMid; ctx.beginPath(); ctx.arc(0, 12, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = armorLight; ctx.beginPath(); ctx.moveTo(-4, 12); ctx.lineTo(4, 12); ctx.lineTo(3, 26); ctx.lineTo(-3, 26); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#050505'; ctx.fillRect(-3, 26, 6, 5);
-
-        // Glowing Cyber-Bomb in hand
-        ctx.save();
-        ctx.translate(0, 32);
-        ctx.shadowColor = '#ff6b00';
-        ctx.shadowBlur = 15;
-
-        ctx.fillStyle = '#111';
-        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
-
-        // Bomb tech lines
-        ctx.strokeStyle = '#ff6b00';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(0, 10); ctx.stroke();
-
-        // Core glowing
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
-
-        ctx.shadowBlur = 0;
-        ctx.restore();
-        ctx.restore();
-      } else {
-        // Unarmed Right Arm
-        drawArm(r * 0.85, -armSwing, true);
-      }
-
-
-      // === HELMET / HEAD ===
-      ctx.save();
-      // Head bounce is slightly offset from body bounce for overlaps
-      ctx.translate(0, -r * 0.45 - (isMoving ? Math.sin(walkCycle * 0.5) * 2 : 0));
-
-      // Neck seal
-      ctx.fillStyle = '#050505';
-      ctx.fillRect(-6, -5, 12, 8);
-
-      // Main Helmet Dome (Sleek and angular)
-      ctx.fillStyle = armorMid;
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.6, 5);
-      ctx.lineTo(r * 0.6, 5);
-      ctx.lineTo(r * 0.55, -r * 0.4);
-      ctx.lineTo(r * 0.3, -r * 0.8);
-      ctx.lineTo(-r * 0.3, -r * 0.8);
-      ctx.lineTo(-r * 0.55, -r * 0.4);
-      ctx.closePath();
-      ctx.fill();
-
-      // Top ridge (Mohawk style vents)
-      ctx.fillStyle = armorDark;
-      ctx.beginPath();
-      ctx.moveTo(-4, -r * 0.8);
-      ctx.lineTo(4, -r * 0.8);
-      ctx.lineTo(2, -r * 0.95);
-      ctx.lineTo(-2, -r * 0.95);
-      ctx.closePath();
-      ctx.fill();
-
-      // === VISOR (Glowing LED strip) ===
-      ctx.shadowColor = primary;
-      ctx.shadowBlur = 15;
-
-      const visorW = r * 1.1;
-      const visorH = r * 0.25;
-
-      // Visor dark background
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.moveTo(-visorW / 2, -r * 0.1);
-      ctx.lineTo(visorW / 2, -r * 0.1);
-      ctx.lineTo(visorW / 2 - 2, r * 0.15);
-      ctx.lineTo(-visorW / 2 + 2, r * 0.15);
-      ctx.closePath();
-      ctx.fill();
-
-      // Glowing optic line (Knight Rider style scan or straight pulse)
-      // Scanner dot moves back and forth
-      const scanPos = Math.sin(timeRef.current * 4) * (visorW / 2 - 4);
-
-      ctx.fillStyle = primary;
-      // Base faint line
-      ctx.globalAlpha = 0.4;
-      ctx.fillRect(-visorW / 2 + 2, -1, visorW - 4, 2);
-
-      // Bright scanning dot
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = visorColor;
-      ctx.beginPath();
-      ctx.arc(scanPos, 0, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Additional optic dots (spider eyes)
-      ctx.fillStyle = primary;
-      ctx.beginPath(); ctx.arc(-visorW / 3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(visorW / 3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
-
-      ctx.shadowBlur = 0;
-
-      // Jaw/Filter guards
-      ctx.fillStyle = armorLight;
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.4, r * 0.15);
-      ctx.lineTo(r * 0.4, r * 0.15);
-      ctx.lineTo(r * 0.2, r * 0.35);
-      ctx.lineTo(-r * 0.2, r * 0.35);
-      ctx.closePath();
-      ctx.fill();
-
-      // Breathing vents
-      ctx.strokeStyle = '#050505';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(-5, r * 0.25); ctx.lineTo(5, r * 0.25); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-3, r * 0.3); ctx.lineTo(3, r * 0.3); ctx.stroke();
-
-      ctx.restore(); // helmet space
-
-      // === BACKPACK / POWER SUPPLY ===
-      ctx.fillStyle = armorDark;
-      ctx.fillRect(-r * 0.4, -r * 0.6, r * 0.8, r * 0.5);
-      ctx.fillStyle = '#0a0a0a';
-      ctx.fillRect(-r * 0.3, -r * 0.55, r * 0.6, r * 0.4);
-
-      // Backpack exhaust/glow
-      ctx.shadowColor = energyCore;
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = energyCore;
-      ctx.globalAlpha = 0.6 + Math.sin(timeRef.current * 8) * 0.4; // Fast pulsing
-      ctx.fillRect(-8, -r * 0.5, 4, r * 0.3);
-      ctx.fillRect(4, -r * 0.5, 4, r * 0.3);
-      ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
-
-      ctx.restore(); // End player rotated transform
 
       // === UI ELEMENTS (world space, not rotated) ===
 

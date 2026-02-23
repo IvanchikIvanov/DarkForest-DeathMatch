@@ -43,6 +43,7 @@ interface Player extends Entity {
   bombCooldown: number;
   hasGun: boolean;   // Has picked up gun
   hasSword: boolean; // Has picked up sword
+  hasChainsaw: boolean; // Has picked up chainsaw (melee like sword)
   hasBomb: boolean;  // Has picked up bomb
   score: number;
 }
@@ -93,6 +94,12 @@ interface SwordPickup {
   active: boolean;
 }
 
+interface ChainsawPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
 interface BombPickup {
   id: string;
   pos: Vector2;
@@ -124,6 +131,7 @@ interface GameState {
   healthPickups: HealthPickup[];
   gunPickups: GunPickup[];
   swordPickups: SwordPickup[];
+  chainsawPickups: ChainsawPickup[];
   bombPickups: BombPickup[];
   bullets: Bullet[];
   thrownSwords: ThrownSword[];
@@ -134,6 +142,7 @@ interface GameState {
   lastHealthSpawnTime: number;
   lastGunSpawnTime: number;
   lastSwordSpawnTime: number;
+  lastChainsawSpawnTime: number;
   lastBombSpawnTime: number;
 }
 
@@ -193,6 +202,11 @@ const BULLET_RADIUS = 8;
 const SWORD_SPAWN_INTERVAL = 15; // Seconds between sword spawns
 const MAX_SWORD_PICKUPS = 2; // Allow up to 2 swords at a time
 const SWORD_PICKUP_RADIUS = 25;
+
+// Chainsaw pickup constants (same as sword)
+const CHAINSAW_SPAWN_INTERVAL = 15;
+const MAX_CHAINSAW_PICKUPS = 2;
+const CHAINSAW_PICKUP_RADIUS = 25;
 const THROWN_SWORD_SPEED = 900;
 const THROWN_SWORD_DAMAGE = 35;
 const THROWN_SWORD_RADIUS = 15;
@@ -426,6 +440,7 @@ const createPlayer = (id: string, index: number): Player => {
     bombCooldown: 0,
     hasGun: false,
     hasSword: false, // Start unarmed - must pick up weapons
+    hasChainsaw: false,
     hasBomb: false,  // Start without bomb
     score: 0
   };
@@ -439,6 +454,12 @@ const createGunPickup = (x: number, y: number): GunPickup => ({
 
 const createSwordPickup = (x: number, y: number): SwordPickup => ({
   id: `sword-${Math.random()}`,
+  pos: { x, y },
+  active: true
+});
+
+const createChainsawPickup = (x: number, y: number): ChainsawPickup => ({
+  id: `chainsaw-${Math.random()}`,
   pos: { x, y },
   active: true
 });
@@ -591,6 +612,7 @@ export default class GameRoom implements Party.Server {
       healthPickups: [],
       gunPickups: [],
       swordPickups: [],
+      chainsawPickups: [],
       bombPickups: [],
       bullets: [],
       thrownSwords: [],
@@ -598,6 +620,7 @@ export default class GameRoom implements Party.Server {
       lastHealthSpawnTime: 0,
       lastGunSpawnTime: 0,
       lastSwordSpawnTime: 0,
+      lastChainsawSpawnTime: 0,
       lastBombSpawnTime: 0
     };
   }
@@ -688,6 +711,7 @@ export default class GameRoom implements Party.Server {
               healthPickups: [],
               gunPickups: [],
               swordPickups: [],
+              chainsawPickups: [],
               bombPickups: [],
               bullets: [],
               thrownSwords: [],
@@ -695,6 +719,7 @@ export default class GameRoom implements Party.Server {
               lastHealthSpawnTime: 0,
               lastGunSpawnTime: 0,
               lastSwordSpawnTime: 0,
+              lastChainsawSpawnTime: 0,
               lastBombSpawnTime: 0
             };
             playerIds.forEach((pid, idx) => {
@@ -758,6 +783,9 @@ export default class GameRoom implements Party.Server {
     const swordPos2 = spawnAtCenter();
     this.state.swordPickups.push(createSwordPickup(swordPos2.x, swordPos2.y));
 
+    const chainsawPos = spawnAtCenter();
+    this.state.chainsawPickups.push(createChainsawPickup(chainsawPos.x, chainsawPos.y));
+
     const bombPos = spawnAtCenter();
     this.state.bombPickups.push(createBombPickup(bombPos.x, bombPos.y));
 
@@ -765,6 +793,7 @@ export default class GameRoom implements Party.Server {
     this.state.lastHealthSpawnTime = 0;
     this.state.lastGunSpawnTime = 0;
     this.state.lastSwordSpawnTime = 0;
+    this.state.lastChainsawSpawnTime = 0;
     this.state.lastBombSpawnTime = 0;
   }
 
@@ -907,6 +936,14 @@ export default class GameRoom implements Party.Server {
       const spawnPos = spawnAtCenter();
       this.state.swordPickups.push(createSwordPickup(spawnPos.x, spawnPos.y));
       this.state.lastSwordSpawnTime = 0;
+    }
+
+    // Spawn chainsaw pickup at center cluster (max 2)
+    this.state.lastChainsawSpawnTime += DT;
+    if (this.state.lastChainsawSpawnTime >= CHAINSAW_SPAWN_INTERVAL && this.state.chainsawPickups.length < MAX_CHAINSAW_PICKUPS) {
+      const spawnPos = spawnAtCenter();
+      this.state.chainsawPickups.push(createChainsawPickup(spawnPos.x, spawnPos.y));
+      this.state.lastChainsawSpawnTime = 0;
     }
 
     // Spawn bomb pickup at center cluster (max 3)
@@ -1060,6 +1097,9 @@ export default class GameRoom implements Party.Server {
     // Update sword pickups
     let newSwordPickups = this.state.swordPickups.filter(sp => sp.active);
 
+    // Update chainsaw pickups
+    let newChainsawPickups = this.state.chainsawPickups.filter(cp => cp.active);
+
     // Update bomb pickups
     let newBombPickups = this.state.bombPickups.filter(bp => bp.active);
 
@@ -1083,9 +1123,9 @@ export default class GameRoom implements Party.Server {
       const dy = input.mouse.y - player.pos.y;
       player.angle = Math.atan2(dy, dx);
 
-      // Sword throwing (right-click) - throw sword if player has one
+      // Sword throwing (right-click) - throw sword if player has one (not chainsaw)
       player.isBlocking = false; // Shield removed - no more blocking
-      if (input.mouseRightDown && player.hasSword && player.attackCooldown <= 0 && !player.isDodging && !player.isAttacking) {
+      if (input.mouseRightDown && player.hasSword && !player.hasChainsaw && player.attackCooldown <= 0 && !player.isDodging && !player.isAttacking) {
         // Throw the sword
         const thrownSword = createThrownSword(player.pos, player.angle || 0, pid);
         newThrownSwords.push(thrownSword);
@@ -1135,8 +1175,8 @@ export default class GameRoom implements Party.Server {
           for (let i = 0; i < 8; i++) {
             newParticles.push(createParticle(player.pos, '#fbbf24', 6, 'spark'));
           }
-        } else if (player.hasSword) {
-          // Sword melee attack (only if player has sword)
+        } else if (player.hasSword || player.hasChainsaw) {
+          // Sword/chainsaw melee attack
           player.isAttacking = true;
           player.attackTimer = SWORD_ATTACK_DURATION;
           player.attackCooldown = SWORD_COOLDOWN;
@@ -1299,6 +1339,7 @@ export default class GameRoom implements Party.Server {
           // Pick up gun - drop any other item
           player.hasGun = true;
           player.hasSword = false;
+          player.hasChainsaw = false;
           player.hasBomb = false;
           gp.active = false;
           // Yellow pickup particles
@@ -1317,11 +1358,29 @@ export default class GameRoom implements Party.Server {
           // Pick up sword - drop any other item
           player.hasSword = true;
           player.hasGun = false;
+          player.hasChainsaw = false;
           player.hasBomb = false;
           sp.active = false;
           // Silver/white pickup particles
           for (let i = 0; i < 12; i++) {
             newParticles.push(createParticle(player.pos, '#e5e7eb', 5, 'spark'));
+          }
+        }
+      });
+
+      // Chainsaw pickup collision - same as sword
+      newChainsawPickups.forEach(cp => {
+        if (!cp.active) return;
+        if (player.hasChainsaw) return; // Already has chainsaw
+        const d = dist(player.pos, cp.pos);
+        if (d < player.radius + CHAINSAW_PICKUP_RADIUS) {
+          player.hasChainsaw = true;
+          player.hasGun = false;
+          player.hasSword = false;
+          player.hasBomb = false;
+          cp.active = false;
+          for (let i = 0; i < 12; i++) {
+            newParticles.push(createParticle(player.pos, '#ef4444', 5, 'spark'));
           }
         }
       });
@@ -1336,6 +1395,7 @@ export default class GameRoom implements Party.Server {
           player.hasBomb = true;
           player.hasGun = false;
           player.hasSword = false;
+          player.hasChainsaw = false;
           bp.active = false;
           // Orange pickup particles
           for (let i = 0; i < 12; i++) {
@@ -1381,6 +1441,7 @@ export default class GameRoom implements Party.Server {
     this.state.healthPickups = newHealthPickups;
     this.state.gunPickups = newGunPickups.filter(gp => gp.active);
     this.state.swordPickups = newSwordPickups.filter(sp => sp.active);
+    this.state.chainsawPickups = newChainsawPickups.filter(cp => cp.active);
     this.state.bombPickups = newBombPickups.filter(bp => bp.active);
     this.state.bullets = newBullets;
     this.state.thrownSwords = newThrownSwords;
