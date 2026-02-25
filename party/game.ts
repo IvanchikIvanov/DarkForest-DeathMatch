@@ -210,7 +210,7 @@ const CHAINSAW_PICKUP_RADIUS = 25;
 const THROWN_SWORD_SPEED = 900;
 const THROWN_SWORD_DAMAGE = 35;
 const THROWN_SWORD_LENGTH = 250; // Full blade length for hit detection
-const THROWN_SWORD_WIDTH = 25;   // Blade width for hitbox
+const THROWN_SWORD_WIDTH = 80;  // Blade width for hitbox (generous for reliable hits)
 
 // Bomb pickup constants
 const BOMB_SPAWN_INTERVAL = 10; // Seconds between bomb spawns
