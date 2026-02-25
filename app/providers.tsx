@@ -28,7 +28,7 @@ export default function Providers({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <OnchainKitProvider
           chain={base}
-          miniKit={{ enabled: false }}
+          miniKit={{ enabled: true }}
         >
           {children}
         </OnchainKitProvider>
