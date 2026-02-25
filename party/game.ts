@@ -1104,7 +1104,6 @@ export default class GameRoom implements Party.Server {
         return dist(p, proj);
       };
       for (const pid of playerIds) {
-        if (pid === sword.ownerId) continue;
         const target = this.state.players[pid];
         if (!target.active) continue;
 
