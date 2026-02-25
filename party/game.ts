@@ -755,18 +755,37 @@ export default class GameRoom implements Party.Server {
     this.broadcast();
   }
 
-  // Send notification to lobby party (uses PartyKit internal API — works in dev and prod)
+  // Send notification to lobby party
   async notifyLobby(data: Record<string, any>) {
+    const body = JSON.stringify(data);
     try {
-      const lobbyParty = this.room.context.parties.lobby;
-      const lobbyRoom = lobbyParty.get("lobby");
-      await lobbyRoom.fetch({
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      // Primary: PartyKit internal API (works when parties are colocated)
+      const lobbyParty = this.room.context?.parties?.lobby;
+      if (lobbyParty) {
+        const lobbyRoom = lobbyParty.get("lobby");
+        await lobbyRoom.fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        return;
+      }
     } catch (e) {
-      console.error('[GAME] Error notifying lobby:', e);
+      console.error('[GAME] context.parties notify failed:', e);
+    }
+    // Fallback: HTTP fetch (requires PARTYKIT_HOST env: npx partykit env add PARTYKIT_HOST)
+    const host = this.room.env.PARTYKIT_HOST;
+    if (host) {
+      try {
+        const url = `${host.startsWith('http') ? host : `https://${host}`}/parties/lobby/lobby`;
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        });
+      } catch (e) {
+        console.error('[GAME] fetch notify lobby failed:', e);
+      }
     }
   }
 

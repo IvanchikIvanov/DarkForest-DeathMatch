@@ -48,6 +48,13 @@ npx partykit deploy
 
 После деплоя получишь URL вида: `duel-arena.karolinaviktorovna.partykit.dev`
 
+**Если второй игрок не видит арены:** добавь env для PartyKit сервера:
+```bash
+npx partykit env add PARTYKIT_HOST
+# Введи: https://duel-arena.ТВОЙ_USERNAME.partykit.dev
+npx partykit deploy
+```
+
 **Текущий URL:** `duel-arena.karolinaviktorovna.partykit.dev`
 
 ### Шаг 5: Настройка Vercel

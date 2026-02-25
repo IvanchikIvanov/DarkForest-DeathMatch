@@ -16,6 +16,15 @@ export default class LobbyRoom implements Party.Server {
 
   constructor(readonly room: Party.Room) {}
 
+  async onStart() {
+    const stored = await this.room.storage.get<[string, RoomInfo][]>("rooms");
+    if (stored) this.rooms = new Map(stored);
+  }
+
+  private async persistRooms() {
+    await this.room.storage.put("rooms", Array.from(this.rooms.entries()));
+  }
+
   // When a client connects, send them the current room list
   onConnect(conn: Party.Connection) {
     conn.send(JSON.stringify({
@@ -25,7 +34,7 @@ export default class LobbyRoom implements Party.Server {
   }
 
   // Handle messages from clients or game rooms
-  onMessage(message: string, sender: Party.Connection) {
+  async onMessage(message: string, sender: Party.Connection) {
     try {
       const data = JSON.parse(message);
 
@@ -42,20 +51,21 @@ export default class LobbyRoom implements Party.Server {
             contractRoomId: data.contractRoomId,
           };
           this.rooms.set(data.roomId, info);
+          await this.persistRooms();
           this.broadcastRooms();
           break;
         }
 
         case 'ROOM_FULL': {
-          // Game room is full (2 players) — remove from lobby
           this.rooms.delete(data.roomId);
+          await this.persistRooms();
           this.broadcastRooms();
           break;
         }
 
         case 'ROOM_CLOSED': {
-          // Game room closed (player left, game over)
           this.rooms.delete(data.roomId);
+          await this.persistRooms();
           this.broadcastRooms();
           break;
         }
@@ -92,18 +102,21 @@ export default class LobbyRoom implements Party.Server {
               contractRoomId: data.contractRoomId,
             };
             this.rooms.set(data.roomId, info);
+            await this.persistRooms();
             this.broadcastRooms();
             return new Response('OK', { status: 200 });
           }
 
           case 'ROOM_FULL': {
             this.rooms.delete(data.roomId);
+            await this.persistRooms();
             this.broadcastRooms();
             return new Response('OK', { status: 200 });
           }
 
           case 'ROOM_CLOSED': {
             this.rooms.delete(data.roomId);
+            await this.persistRooms();
             this.broadcastRooms();
             return new Response('OK', { status: 200 });
           }

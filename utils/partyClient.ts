@@ -202,6 +202,7 @@ export interface LobbyClientCallbacks {
 export class LobbyClient {
     private socket: PartySocket | null = null;
     private callbacks: LobbyClientCallbacks;
+    private refreshInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(callbacks: LobbyClientCallbacks) {
         this.callbacks = callbacks;
@@ -210,6 +211,10 @@ export class LobbyClient {
     connect(): void {
         if (this.socket) {
             this.socket.close();
+        }
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
         }
 
         console.log(`[LobbyClient] Connecting to lobby on host: ${PARTYKIT_HOST}`);
@@ -233,14 +238,28 @@ export class LobbyClient {
 
         this.socket.addEventListener('open', () => {
             console.log('[LobbyClient] Connected to lobby');
+            this.socket?.send(JSON.stringify({ type: 'REFRESH' }));
+            this.refreshInterval = setInterval(() => {
+                if (this.socket?.readyState === WebSocket.OPEN) {
+                    this.socket.send(JSON.stringify({ type: 'REFRESH' }));
+                }
+            }, 5000);
         });
 
         this.socket.addEventListener('close', () => {
             console.log('[LobbyClient] Disconnected from lobby');
+            if (this.refreshInterval) {
+                clearInterval(this.refreshInterval);
+                this.refreshInterval = null;
+            }
         });
     }
 
     disconnect(): void {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+        }
         if (this.socket) {
             this.socket.close();
             this.socket = null;
