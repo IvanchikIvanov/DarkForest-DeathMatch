@@ -1098,33 +1098,17 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Thrown Swords - Flying spinning swords
+    // Draw Thrown Swords — same Kenny-style sword as in hand (scale 1, same colors)
     const thrownSwords = (state as any).thrownSwords || [];
     thrownSwords.forEach((sword: any) => {
       if (!sword.active) return;
       ctx.save();
       ctx.translate(sword.pos.x, sword.pos.y);
 
-      // Calculate angle from velocity and add spin effect
-      const angle = Math.atan2(sword.vel.y, sword.vel.x);
-      const spin = timeRef.current * 15; // Fast spin
-      ctx.rotate(angle + spin);
+      const velAngle = Math.atan2(sword.vel.y, sword.vel.x);
+      const spin = timeRef.current * 15;
+      drawSword(velAngle + Math.PI / 2 + spin, 1, false, timeRef.current);
 
-      // Glow effect
-      ctx.shadowColor = '#e5e7eb';
-      ctx.shadowBlur = 20;
-
-      // Sword shape - vector only
-      ctx.fillStyle = '#e5e7eb';
-      ctx.fillRect(-4, -30, 8, 60); // Blade
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-2, -28, 4, 50); // Blade highlight
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(-12, 20, 24, 6); // Guard
-      ctx.fillStyle = '#52525b';
-      ctx.fillRect(-3, 26, 6, 10); // Handle
-
-      ctx.shadowBlur = 0;
       ctx.restore();
     });
 
