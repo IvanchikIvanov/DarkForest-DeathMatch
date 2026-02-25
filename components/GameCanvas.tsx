@@ -204,9 +204,9 @@ const GameCanvas: React.FC = () => {
     console.log('[GameCanvas] createRoom roomId=', newRoomId, 'betDisplay=', betDisplay);
     partyClientRef.current?.connect(newRoomId);
     setTimeout(() => {
-      if (pendingRoomInfoRef.current) {
+      if (pendingRoomInfoRef.current && partyClientRef.current?.isConnected()) {
         const p = pendingRoomInfoRef.current;
-        partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
+        partyClientRef.current.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
         pendingRoomInfoRef.current = null;
       }
     }, 800);
