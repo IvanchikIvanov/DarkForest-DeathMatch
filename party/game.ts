@@ -774,8 +774,8 @@ export default class GameRoom implements Party.Server {
       console.error('[GAME] context.parties notify failed:', e);
     }
     // Fallback: HTTP fetch (requires PARTYKIT_HOST env: npx partykit env add PARTYKIT_HOST)
-    const host = this.room.env.PARTYKIT_HOST;
-    if (host) {
+    const host = this.room.env.PARTYKIT_HOST as string | undefined;
+    if (host && typeof host === 'string') {
       try {
         const url = `${host.startsWith('http') ? host : `https://${host}`}/parties/lobby/lobby`;
         await fetch(url, {
