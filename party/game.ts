@@ -755,13 +755,14 @@ export default class GameRoom implements Party.Server {
     this.broadcast();
   }
 
-  // Send notification to lobby party
+  // Send notification to lobby party (uses PartyKit internal API — works in dev and prod)
   async notifyLobby(data: Record<string, any>) {
     try {
-      const lobbyUrl = `${this.room.env.PARTYKIT_HOST || 'http://localhost:1999'}/parties/lobby/lobby`;
-      await fetch(lobbyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const lobbyParty = this.room.context.parties.lobby;
+      const lobbyRoom = lobbyParty.get("lobby");
+      await lobbyRoom.fetch({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
     } catch (e) {
