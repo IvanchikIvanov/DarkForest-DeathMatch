@@ -27,8 +27,10 @@ export default class LobbyRoom implements Party.Server {
 
   onConnect(conn: Party.Connection) {
     const rooms = Array.from(this.rooms.values());
+    console.log('[LOBBY] onConnect, sending ROOMS_LIST to client, count=', rooms.length);
     conn.send(JSON.stringify({ type: 'ROOMS_LIST', rooms }));
   }
+
 
   // Handle messages from clients or game rooms
   async onMessage(message: string, sender: Party.Connection) {
@@ -89,6 +91,7 @@ export default class LobbyRoom implements Party.Server {
 
         switch (data.type) {
           case 'REGISTER_ROOM': {
+            console.log('[LOBBY] REGISTER_ROOM received via HTTP, roomId=', data.roomId);
             const info: RoomInfo = {
               roomId: data.roomId,
               betAmount: data.betAmount,
@@ -140,6 +143,8 @@ export default class LobbyRoom implements Party.Server {
   }
 
   broadcastRooms() {
+    const count = this.rooms.size;
+    console.log('[LOBBY] broadcastRooms, rooms=', count, Array.from(this.rooms.keys()));
     const msg = JSON.stringify({
       type: 'ROOMS_LIST',
       rooms: Array.from(this.rooms.values()),

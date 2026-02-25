@@ -130,7 +130,11 @@ export class PartyClient {
 
     // Send room info (bet amount, creator name, contract ID) — host only, after connecting
     sendRoomInfo(betAmount: number, betDisplay: string, creatorName: string, contractRoomId?: number): void {
-        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            console.log('[PartyClient] sendRoomInfo skipped: socket not open', this.socket?.readyState);
+            return;
+        }
+        console.log('[PartyClient] sendRoomInfo', betDisplay, creatorName);
 
         this.socket.send(JSON.stringify({
             type: 'SET_ROOM_INFO',
@@ -230,6 +234,7 @@ export class LobbyClient {
                 const data = JSON.parse(event.data);
                 if (data.type === 'ROOMS_LIST') {
                     const rooms = data.rooms || [];
+                    console.log('[LobbyClient] ROOMS_LIST received, count=', rooms.length, rooms.map((r: any) => r.roomId));
                     this.callbacks.onRoomsUpdate(rooms);
                 }
             } catch (e) {

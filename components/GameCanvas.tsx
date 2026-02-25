@@ -105,6 +105,7 @@ const GameCanvas: React.FC = () => {
         setConnectionError(null);
         if (host && pendingRoomInfoRef.current) {
           const p = pendingRoomInfoRef.current;
+          console.log('[GameCanvas] onConnect host, sending roomInfo');
           partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
           pendingRoomInfoRef.current = null;
         }
@@ -128,8 +129,9 @@ const GameCanvas: React.FC = () => {
 
   // --- Initialize Lobby Client ---
   useEffect(() => {
-    const lobby = new LobbyClient({
+    const     lobby = new LobbyClient({
       onRoomsUpdate: (rooms) => {
+        console.log('[GameCanvas] onRoomsUpdate', rooms.length, rooms.map(r => r.roomId));
         setOpenRooms(rooms);
       },
     });
@@ -197,6 +199,7 @@ const GameCanvas: React.FC = () => {
     const betDisplay = walletConnected ? formatEther(actualBet) + ' ETH' : 'TESTING (No Wager)';
     const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
     pendingRoomInfoRef.current = { betAmount: actualBet, betDisplay, creatorName, contractRoomId: onChainRoomId };
+    console.log('[GameCanvas] createRoom roomId=', newRoomId, 'betDisplay=', betDisplay);
     partyClientRef.current?.connect(newRoomId);
     setTimeout(() => {
       if (pendingRoomInfoRef.current) {

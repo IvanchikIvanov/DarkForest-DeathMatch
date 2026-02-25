@@ -700,6 +700,8 @@ export default class GameRoom implements Party.Server {
                 contractRoomId: this.contractRoomId,
               });
             }
+          } else {
+            console.log('[GAME] SET_ROOM_INFO ignored: sender', sender.id, '!= hostId', this.hostId);
           }
           break;
         case 'RESET':
@@ -765,6 +767,7 @@ export default class GameRoom implements Party.Server {
   async notifyLobby(data: Record<string, any>) {
     const body = JSON.stringify(data);
     const roomId = data.roomId || this.room.id;
+    console.log('[GAME] notifyLobby', data.type, 'roomId=', roomId, 'lobbyBaseUrl=', this.lobbyBaseUrl || '(none)');
     // 1. Try PartyKit internal API (context.parties)
     try {
       const lobbyParty = this.room.context?.parties?.lobby;
@@ -776,8 +779,12 @@ export default class GameRoom implements Party.Server {
           body,
         });
         if (res.ok) {
+          console.log('[GAME] notifyLobby OK via context.parties');
           return;
         }
+        console.log('[GAME] context.parties fetch res.status=', res.status);
+      } else {
+        console.log('[GAME] context.parties.lobby not available');
       }
     } catch (e) {
       console.error('[GAME] context.parties notify failed:', e);
@@ -792,7 +799,9 @@ export default class GameRoom implements Party.Server {
           headers: { 'Content-Type': 'application/json' },
           body,
         });
-        if (!res.ok) {
+        if (res.ok) {
+          console.log('[GAME] notifyLobby OK via fetch', url);
+        } else {
           console.error('[GAME] lobby fetch failed:', res.status, url);
         }
       } catch (e) {
