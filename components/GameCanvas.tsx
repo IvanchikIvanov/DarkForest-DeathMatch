@@ -98,16 +98,18 @@ const GameCanvas: React.FC = () => {
         }
       },
       onConnect: (id, host) => {
-        console.log('[GameCanvas] Connected with ID:', id, 'isHost:', host);
+        console.log('[GameCanvas] onConnect id=', id, 'host=', host, 'pendingRoomInfo=', !!pendingRoomInfoRef.current);
         setPlayerId(id);
         playerIdRef.current = id;
         setIsHost(host);
         setConnectionError(null);
         if (host && pendingRoomInfoRef.current) {
           const p = pendingRoomInfoRef.current;
-          console.log('[GameCanvas] onConnect host, sending roomInfo');
+          console.log('[GameCanvas] SENDING roomInfo to server, roomId=', partyClientRef.current?.getRoomId());
           partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
           pendingRoomInfoRef.current = null;
+        } else {
+          console.log('[GameCanvas] NOT sending roomInfo: host=', host, 'hasPending=', !!pendingRoomInfoRef.current);
         }
       },
       onClose: () => {
