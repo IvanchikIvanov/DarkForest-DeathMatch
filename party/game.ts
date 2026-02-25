@@ -209,7 +209,8 @@ const MAX_CHAINSAW_PICKUPS = 2;
 const CHAINSAW_PICKUP_RADIUS = 25;
 const THROWN_SWORD_SPEED = 900;
 const THROWN_SWORD_DAMAGE = 35;
-const THROWN_SWORD_RADIUS = 15;
+const THROWN_SWORD_LENGTH = 250; // Full blade length for hit detection
+const THROWN_SWORD_WIDTH = 25;   // Blade width for hitbox
 
 // Bomb pickup constants
 const BOMB_SPAWN_INTERVAL = 10; // Seconds between bomb spawns
@@ -1088,14 +1089,27 @@ export default class GameRoom implements Party.Server {
         sword.pos.y = clamp(sword.pos.y, 0, CANVAS_HEIGHT);
       }
 
-      // Check collision with players
+      // Check collision with players — hit along full sword length (segment)
+      const velNorm = normalize(sword.vel);
+      const tip = { x: sword.pos.x + velNorm.x * THROWN_SWORD_LENGTH, y: sword.pos.y + velNorm.y * THROWN_SWORD_LENGTH };
+      const distToSegment = (p: Vector2, a: Vector2, b: Vector2): number => {
+        const vx = b.x - a.x, vy = b.y - a.y;
+        const wx = p.x - a.x, wy = p.y - a.y;
+        const c1 = wx * vx + wy * vy;
+        const c2 = vx * vx + vy * vy;
+        if (c1 <= 0) return dist(p, a);
+        if (c2 <= c1) return dist(p, b);
+        const t = c1 / c2;
+        const proj = { x: a.x + t * vx, y: a.y + t * vy };
+        return dist(p, proj);
+      };
       for (const pid of playerIds) {
-        if (pid === sword.ownerId) continue; // Don't hit self
+        if (pid === sword.ownerId) continue;
         const target = this.state.players[pid];
         if (!target.active) continue;
 
-        const d = dist(sword.pos, target.pos);
-        if (d < target.radius + THROWN_SWORD_RADIUS) {
+        const d = distToSegment(target.pos, sword.pos, tip);
+        if (d < target.radius + THROWN_SWORD_WIDTH) {
           // HIT!
           if (!target.isDodging && target.hp > 0) {
             target.hp = Math.max(0, target.hp - THROWN_SWORD_DAMAGE);
