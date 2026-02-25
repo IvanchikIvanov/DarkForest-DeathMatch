@@ -24,11 +24,11 @@ const wagmiConfig = createConfig({
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
       <QueryClientProvider client={queryClient}>
         <OnchainKitProvider
           chain={base}
-          miniKit={{ enabled: true }}
+          miniKit={{ enabled: false }}
         >
           {children}
         </OnchainKitProvider>

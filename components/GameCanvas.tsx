@@ -1612,10 +1612,11 @@ const GameCanvas: React.FC = () => {
                 onSelect={setSelectedBet}
                 selectedBet={selectedBet}
                 disabled={isCreatingRoom}
+                showNoStake={!walletConnected}
               />
               <button
                 onClick={createRoomWithBet}
-                disabled={!selectedBet || isCreatingRoom}
+                disabled={isCreatingRoom || (walletConnected && !selectedBet)}
                 className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
               >
                 {isCreatingRoom ? (
