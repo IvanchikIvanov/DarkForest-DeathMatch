@@ -65,6 +65,7 @@ const GameCanvas: React.FC = () => {
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [roomBetAmount, setRoomBetAmount] = useState<bigint | null>(null);
+  const pendingRoomInfoRef = useRef<{ betAmount: bigint; betDisplay: string; creatorName: string; contractRoomId: number } | null>(null);
   const [gameFinished, setGameFinished] = useState(false);
   const [claimingReward, setClaimingReward] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -102,6 +103,11 @@ const GameCanvas: React.FC = () => {
         playerIdRef.current = id;
         setIsHost(host);
         setConnectionError(null);
+        if (host && pendingRoomInfoRef.current) {
+          const p = pendingRoomInfoRef.current;
+          partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
+          pendingRoomInfoRef.current = null;
+        }
       },
       onClose: () => {
         console.log('[GameCanvas] Disconnected');
@@ -185,24 +191,20 @@ const GameCanvas: React.FC = () => {
       showToast('Wallet transaction failed, creating off-chain test room', 'error');
     }
 
-    // Always create the PartyKit room (off-chain) so players can test
     setRoomBetAmount(actualBet);
     const newRoomId = generateRoomId();
     setRoomId(newRoomId);
-    partyClientRef.current?.connect(newRoomId);
-
-    // Send room info to game server (which notifies lobby) — include contractRoomId
     const betDisplay = walletConnected ? formatEther(actualBet) + ' ETH' : 'TESTING (No Wager)';
     const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
-
+    pendingRoomInfoRef.current = { betAmount: actualBet, betDisplay, creatorName, contractRoomId: onChainRoomId };
+    partyClientRef.current?.connect(newRoomId);
     setTimeout(() => {
-      partyClientRef.current?.sendRoomInfo(
-        Number(actualBet),
-        betDisplay,
-        creatorName,
-        onChainRoomId
-      );
-    }, 500);
+      if (pendingRoomInfoRef.current) {
+        const p = pendingRoomInfoRef.current;
+        partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
+        pendingRoomInfoRef.current = null;
+      }
+    }, 800);
 
     setIsCreatingRoom(false);
   };

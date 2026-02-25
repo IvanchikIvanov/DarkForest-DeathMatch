@@ -25,12 +25,9 @@ export default class LobbyRoom implements Party.Server {
     await this.room.storage.put("rooms", Array.from(this.rooms.entries()));
   }
 
-  // When a client connects, send them the current room list
   onConnect(conn: Party.Connection) {
-    conn.send(JSON.stringify({
-      type: 'ROOMS_LIST',
-      rooms: Array.from(this.rooms.values()),
-    }));
+    const rooms = Array.from(this.rooms.values());
+    conn.send(JSON.stringify({ type: 'ROOMS_LIST', rooms }));
   }
 
   // Handle messages from clients or game rooms

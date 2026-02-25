@@ -598,6 +598,7 @@ export default class GameRoom implements Party.Server {
   creatorName: string = 'Anonymous';
   contractRoomId: number = -1;
   roomRegistered: boolean = false;
+  lobbyBaseUrl: string | null = null; // from first connection's request, for fetch fallback
 
   constructor(readonly room: Party.Room) {
     const { walls, tileMap, obstacles } = generateArena();
@@ -625,10 +626,17 @@ export default class GameRoom implements Party.Server {
     };
   }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  onConnect(conn: Party.Connection, ctx?: Party.ConnectionContext) {
     const playerId = conn.id;
     if (!this.hostId) {
       this.hostId = playerId;
+    }
+    // Derive lobby base URL from request (for notifyLobby fetch fallback)
+    if (!this.lobbyBaseUrl && ctx?.request?.url) {
+      try {
+        const url = new URL(ctx.request.url);
+        this.lobbyBaseUrl = url.origin;
+      } catch (_) {}
     }
     const playerIndex = Object.keys(this.state.players).length;
     this.state.players[playerId] = createPlayer(playerId, playerIndex);
@@ -676,13 +684,11 @@ export default class GameRoom implements Party.Server {
           }
           break;
         case 'SET_ROOM_INFO':
-          // Creator sends room info (bet amount, name, contract ID) after connecting
           if (sender.id === this.hostId) {
             this.betAmount = data.betAmount || 0;
             this.betDisplay = data.betDisplay || '0 ETH';
             this.creatorName = data.creatorName || 'Anonymous';
             this.contractRoomId = data.contractRoomId ?? -1;
-            // Register room in lobby
             if (!this.roomRegistered) {
               this.roomRegistered = true;
               this.notifyLobby({
@@ -758,34 +764,42 @@ export default class GameRoom implements Party.Server {
   // Send notification to lobby party
   async notifyLobby(data: Record<string, any>) {
     const body = JSON.stringify(data);
+    const roomId = data.roomId || this.room.id;
+    // 1. Try PartyKit internal API (context.parties)
     try {
-      // Primary: PartyKit internal API (works when parties are colocated)
       const lobbyParty = this.room.context?.parties?.lobby;
       if (lobbyParty) {
         const lobbyRoom = lobbyParty.get("lobby");
-        await lobbyRoom.fetch({
+        const res = await lobbyRoom.fetch({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body,
         });
-        return;
+        if (res.ok) {
+          return;
+        }
       }
     } catch (e) {
       console.error('[GAME] context.parties notify failed:', e);
     }
-    // Fallback: HTTP fetch (requires PARTYKIT_HOST env: npx partykit env add PARTYKIT_HOST)
-    const host = this.room.env.PARTYKIT_HOST as string | undefined;
-    if (host && typeof host === 'string') {
+    // 2. Fallback: HTTP fetch (lobbyBaseUrl from request, or PARTYKIT_HOST env)
+    const baseUrl = this.lobbyBaseUrl || (this.room.env.PARTYKIT_HOST as string | undefined);
+    if (baseUrl && typeof baseUrl === 'string') {
+      const url = `${baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`}/parties/lobby/lobby`;
       try {
-        const url = `${host.startsWith('http') ? host : `https://${host}`}/parties/lobby/lobby`;
-        await fetch(url, {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body,
         });
+        if (!res.ok) {
+          console.error('[GAME] lobby fetch failed:', res.status, url);
+        }
       } catch (e) {
-        console.error('[GAME] fetch notify lobby failed:', e);
+        console.error('[GAME] lobby fetch error:', e);
       }
+    } else {
+      console.error('[GAME] notifyLobby: no lobbyBaseUrl or PARTYKIT_HOST, roomId=', roomId);
     }
   }
 

@@ -229,7 +229,8 @@ export class LobbyClient {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'ROOMS_LIST') {
-                    this.callbacks.onRoomsUpdate(data.rooms || []);
+                    const rooms = data.rooms || [];
+                    this.callbacks.onRoomsUpdate(rooms);
                 }
             } catch (e) {
                 console.error('[LobbyClient] Error parsing message:', e);
