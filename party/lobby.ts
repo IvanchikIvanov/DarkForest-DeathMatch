@@ -126,12 +126,12 @@ export default class LobbyRoom implements Party.Server {
       }
     }
 
-    // GET returns current room list
+    // GET returns current room list (for bot API)
     if (req.method === 'GET') {
       return new Response(JSON.stringify({
         rooms: Array.from(this.rooms.values()),
       }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 

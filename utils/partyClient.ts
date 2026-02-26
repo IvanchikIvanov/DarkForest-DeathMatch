@@ -119,6 +119,12 @@ export class PartyClient {
         }));
     }
 
+    // Bot API: send text command ("move up", "attack", "dodge", "throw bomb", "aim x y")
+    sendBotCommand(command: string): void {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+        this.socket.send(JSON.stringify({ type: 'BOT', command }));
+    }
+
     // Start the game (host only)
     startGame(): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;

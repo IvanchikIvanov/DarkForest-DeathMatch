@@ -279,7 +279,76 @@ interface SetRoomInfoMessage {
   contractRoomId?: number;
 }
 
-type GameMessage = InputMessage | JoinMessage | StartMessage | ResetMessage | SetRoomInfoMessage;
+// Bot API: text commands for OpenClaw etc.
+interface BotCommandMessage {
+  type: 'BOT';
+  command: string; // "move up", "attack", "dodge", "throw bomb", "aim x y"
+}
+
+type GameMessage = InputMessage | JoinMessage | StartMessage | ResetMessage | SetRoomInfoMessage | BotCommandMessage;
+
+// Parse bot command string → PlayerInput
+const parseBotCommand = (cmd: string, currentInput?: PlayerInput): PlayerInput => {
+  const base: PlayerInput = currentInput || {
+    keys: [],
+    mouse: { x: 0, y: 0 },
+    mouseDown: false,
+    mouseRightDown: false,
+    throwBomb: false,
+  };
+  const keys = new Set(base.keys);
+  const lower = cmd.toLowerCase().trim();
+
+  // Movement
+  if (lower.startsWith('move ')) {
+    const dir = lower.slice(5);
+    keys.delete('w'); keys.delete('s'); keys.delete('a'); keys.delete('d');
+    if (dir.includes('up')) keys.add('w');
+    if (dir.includes('down')) keys.add('s');
+    if (dir.includes('left')) keys.add('a');
+    if (dir.includes('right')) keys.add('d');
+  }
+  // Single direction aliases
+  else if (lower === 'up' || lower === 'move up') { keys.delete('s'); keys.delete('a'); keys.delete('d'); keys.add('w'); }
+  else if (lower === 'down' || lower === 'move down') { keys.delete('w'); keys.delete('a'); keys.delete('d'); keys.add('s'); }
+  else if (lower === 'left' || lower === 'move left') { keys.delete('w'); keys.delete('s'); keys.delete('d'); keys.add('a'); }
+  else if (lower === 'right' || lower === 'move right') { keys.delete('w'); keys.delete('s'); keys.delete('a'); keys.add('d'); }
+  // Actions (attack at x y = aim + attack)
+  else if (lower === 'attack' || lower === 'shoot') { return { ...base, mouseDown: true }; }
+  else if (lower.startsWith('attack ')) {
+    const parts = lower.slice(7).trim().split(/\s+/);
+    const x = parseFloat(parts[0]), y = parseFloat(parts[1]);
+    if (!isNaN(x) && !isNaN(y)) return { ...base, mouse: { x, y }, mouseDown: true };
+    return { ...base, mouseDown: true };
+  }
+  else if (lower === 'throw' || lower === 'throw sword') { return { ...base, mouseRightDown: true }; }
+  else if (lower === 'throw bomb' || lower === 'bomb') { return { ...base, throwBomb: true }; }
+  else if (lower.startsWith('dodge')) {
+    const dir = lower.slice(5).trim() || 'up';
+    keys.add(' ');
+    keys.delete('w'); keys.delete('s'); keys.delete('a'); keys.delete('d');
+    if (dir.includes('up')) keys.add('w');
+    if (dir.includes('down')) keys.add('s');
+    if (dir.includes('left')) keys.add('a');
+    if (dir.includes('right')) keys.add('d');
+  }
+  else if (lower.startsWith('aim ')) {
+    const parts = lower.slice(4).trim().split(/\s+/);
+    const x = parseFloat(parts[0]);
+    const y = parseFloat(parts[1]);
+    if (!isNaN(x) && !isNaN(y)) {
+      return { ...base, mouse: { x, y } };
+    }
+  }
+  else if (lower === 'stop' || lower === 'idle') {
+    return { keys: [], mouse: base.mouse, mouseDown: false, mouseRightDown: false, throwBomb: false };
+  }
+
+  return {
+    ...base,
+    keys: Array.from(keys),
+  };
+};
 
 // Helpers
 const dist = (v1: Vector2, v2: Vector2) => Math.hypot(v2.x - v1.x, v2.y - v1.y);
@@ -672,6 +741,14 @@ export default class GameRoom implements Party.Server {
     try {
       const data: GameMessage = JSON.parse(message);
       switch (data.type) {
+        case 'BOT': {
+          const player = this.state.players[sender.id];
+          if (player) {
+            const current = this.inputs[sender.id];
+            this.inputs[sender.id] = parseBotCommand(data.command, current);
+          }
+          break;
+        }
         case 'INPUT':
           this.inputs[data.playerId] = data.payload;
           break;
@@ -742,6 +819,46 @@ export default class GameRoom implements Party.Server {
     } catch (e) {
       console.error('[SERVER] Error parsing message:', e);
     }
+  }
+
+  // Bot mini-API: HTTP GET = state, POST = command
+  async onRequest(req: Party.Request): Promise<Response> {
+    if (req.method === 'GET') {
+      return new Response(JSON.stringify({
+        status: this.state.status,
+        players: Object.fromEntries(
+          Object.entries(this.state.players).map(([id, p]) => [
+            id,
+            { pos: p.pos, hp: p.hp, maxHp: p.maxHp, hasGun: p.hasGun, hasSword: p.hasSword, hasBomb: p.hasBomb, isDodging: p.isDodging, isAttacking: p.isAttacking }
+          ])
+        ),
+        healthPickups: this.state.healthPickups.filter(h => h.active),
+        gunPickups: this.state.gunPickups.filter(g => g.active),
+        swordPickups: this.state.swordPickups.filter(s => s.active),
+        bombPickups: this.state.bombPickups.filter(b => b.active),
+        tileMap: this.state.tileMap,
+        winnerId: this.state.winnerId,
+      }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json() as { playerId?: string; command?: string };
+        const { playerId, command } = body;
+        if (!playerId || !command || !this.state.players[playerId]) {
+          return new Response(JSON.stringify({ error: 'playerId and command required' }), { status: 400 });
+        }
+        const current = this.inputs[playerId];
+        this.inputs[playerId] = parseBotCommand(command, current);
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+      }
+    }
+    return new Response('Method not allowed', { status: 405 });
   }
 
   onClose(conn: Party.Connection) {
