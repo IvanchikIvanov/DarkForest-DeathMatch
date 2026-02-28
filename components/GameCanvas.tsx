@@ -3285,9 +3285,9 @@ const GameCanvas: React.FC = () => {
             </>
           ) : (
             /* Hero Select Screen — hero left (no frame), menu right, lower on screen */
-            <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-start mt-24">
+            <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-center mt-24">
               {/* Hero — left, no frame, full body */}
-              <div className="flex-1 flex flex-col items-center justify-end min-h-[500px] relative">
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] relative">
                 <canvas
                   ref={heroPreviewCanvasRef}
                   width={420}
@@ -3320,8 +3320,8 @@ const GameCanvas: React.FC = () => {
                 </div>
               </div>
 
-              {/* Menu panel — right, compact, no stretch */}
-              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] self-start w-full max-w-[320px]">
+              {/* Menu panel — right, opposite hero, compact */}
+              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] self-center w-full max-w-[320px]">
                 {uiState.actionParams?.type === 'create' && (
                   <>
                     <div className="mb-2 p-2 bg-slate-700 rounded-lg border-2 border-slate-600">
