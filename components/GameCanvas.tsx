@@ -3320,35 +3320,35 @@ const GameCanvas: React.FC = () => {
                 </div>
               </div>
 
-              {/* Menu panel — right */}
-              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-8 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] min-h-[400px]">
+              {/* Menu panel — right, compact */}
+              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] min-h-[200px]">
                 {uiState.actionParams?.type === 'create' && (
                   <>
-                    <div className="mb-3 p-3 bg-slate-700 rounded-xl border-4 border-slate-600">
-                      <span className="font-bold text-slate-300 block mb-1 text-sm">Game mode</span>
-                      <div className="flex gap-2">
+                    <div className="mb-2 p-2 bg-slate-700 rounded-lg border-2 border-slate-600">
+                      <span className="font-bold text-slate-300 block mb-0.5 text-xs">Game mode</span>
+                      <div className="flex gap-1.5">
                         <button
                           onClick={() => setCreateRoomGameMode('deathmatch')}
-                          className={`flex-1 px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomGameMode === 'deathmatch' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                          className={`flex-1 px-3 py-1.5 rounded font-black text-sm border-2 transition-all ${createRoomGameMode === 'deathmatch' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
                         >
                           DEATHMATCH
                         </button>
                         <button
                           onClick={() => setCreateRoomGameMode('ctf')}
-                          className={`flex-1 px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomGameMode === 'ctf' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                          className={`flex-1 px-3 py-1.5 rounded font-black text-sm border-2 transition-all ${createRoomGameMode === 'ctf' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
                         >
                           CTF
                         </button>
                       </div>
                     </div>
-                    <div className="mb-3 p-3 bg-slate-700 rounded-xl border-4 border-slate-600">
-                      <span className="font-bold text-slate-300 block mb-1 text-sm">Players in arena</span>
-                      <div className="flex gap-2 flex-wrap">
+                    <div className="mb-2 p-2 bg-slate-700 rounded-lg border-2 border-slate-600">
+                      <span className="font-bold text-slate-300 block mb-0.5 text-xs">Players in arena</span>
+                      <div className="flex gap-1.5 flex-wrap">
                         {[2, 3, 4, 5, 6].map((n) => (
                           <button
                             key={n}
                             onClick={() => setCreateRoomMaxPlayers(n)}
-                            className={`px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomMaxPlayers === n ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                            className={`px-3 py-1.5 rounded font-black text-sm border-2 transition-all ${createRoomMaxPlayers === n ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
                           >
                             {n}
                           </button>
@@ -3358,10 +3358,10 @@ const GameCanvas: React.FC = () => {
                   </>
                 )}
 
-                <div className="flex gap-4 mt-auto">
+                <div className="flex gap-3 mt-2">
                   <button
                     onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'MENU', actionParams: undefined })); }}
-                    className="flex-1 cartoon-btn cartoon-btn-secondary !w-auto"
+                    className="flex-1 cartoon-btn cartoon-btn-secondary !w-auto !py-2 !text-sm"
                   >
                     BACK
                   </button>
@@ -3374,7 +3374,7 @@ const GameCanvas: React.FC = () => {
                         joinOpenRoom(uiState.actionParams.room);
                       }
                     }}
-                    className="flex-2 cartoon-btn cartoon-btn-primary !w-auto"
+                    className="flex-2 cartoon-btn cartoon-btn-primary !w-auto !py-2 !text-sm"
                   >
                     {uiState.actionParams?.type === 'create' ? 'CREATE ARENA' : uiState.actionParams?.type === 'join' ? 'JOIN ARENA' : 'ENTER ARENA'}
                   </button>
