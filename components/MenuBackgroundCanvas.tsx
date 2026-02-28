@@ -9,28 +9,24 @@ export interface MenuBackgroundCanvasRef {
 const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBackgroundCanvas(_, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
-  const particlesRef = useRef<{ x: number; y: number; size: number; vx: number; vy: number; opacity: number }[]>([]);
-  const bloodDropsRef = useRef<{ x: number; y: number; vy: number; size: number; length: number }[]>([]);
-  const bloodPuddlesRef = useRef<{ x: number; y: number; radius: number; maxRadius: number; growSpeed: number; opacity: number }[]>([]);
-  const splattersRef = useRef<{ x: number; y: number; vx: number; vy: number; size: number; life: number; decay: number; gravity: number; color: string }[]>([]);
+  const particlesRef = useRef<{ x: number; y: number; size: number; vx: number; vy: number; opacity: number; color?: string }[]>([]);
   const kennyRef = useRef({ x: -100, y: 0, speed: 3.5, active: true, timer: 0 });
   const rafRef = useRef<number | null>(null);
   const sizeRef = useRef({ w: 0, h: 0 });
 
   useImperativeHandle(ref, () => ({
     spawnSplatter(x: number, y: number) {
-      for (let i = 0; i < 90; i++) {
+      const colors = ['#38bdf8', '#fbbf24', '#a3e635', '#f472b6', '#c084fc'];
+      for (let i = 0; i < 40; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const force = 4 + Math.random() * 15;
-        splattersRef.current.push({
+        const force = 3 + Math.random() * 8;
+        particlesRef.current.push({
           x, y,
           vx: Math.cos(angle) * force,
           vy: Math.sin(angle) * force,
-          size: 2 + Math.random() * 10,
-          life: 1.0,
-          decay: 0.008 + Math.random() * 0.015,
-          gravity: 0.35,
-          color: Math.random() > 0.3 ? '#7f1d1d' : '#450a0a'
+          size: 4 + Math.random() * 8,
+          opacity: 1,
+          color: colors[Math.floor(Math.random() * colors.length)]
         });
       }
     }
@@ -55,14 +51,14 @@ const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBa
 
     const particles = particlesRef.current;
     if (particles.length === 0) {
-      for (let i = 0; i < 150; i++) {
+      for (let i = 0; i < 60; i++) {
         particles.push({
           x: Math.random() * sizeRef.current.w,
           y: Math.random() * sizeRef.current.h,
-          size: Math.random() * 2 + 0.5,
-          vx: (Math.random() - 0.5) * 0.4,
-          vy: -Math.random() * 0.8 - 0.1,
-          opacity: Math.random() * 0.5
+          size: Math.random() * 3 + 1,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: -Math.random() * 1.5 - 0.5,
+          opacity: Math.random() * 0.5 + 0.2
         });
       }
     }
@@ -75,7 +71,7 @@ const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBa
       const hop = Math.abs(Math.sin(t * 15)) * 10;
       ctx.translate(0, -hop);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = '#0f172a';
       ctx.fillStyle = '#78350f';
       ctx.beginPath();
       ctx.ellipse(-12, 12, 10, 6, 0, 0, Math.PI * 2);
@@ -122,7 +118,7 @@ const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBa
       ctx.ellipse(6, -28, 8, 10, -0.1, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = '#0f172a';
       ctx.beginPath();
       ctx.arc(-4, -28, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -132,40 +128,39 @@ const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBa
       ctx.restore();
     }
 
-    function createBloodDrop() {
-      const { w } = sizeRef.current;
-      const x = (w / 2 - 450) + Math.random() * 900;
-      bloodDropsRef.current.push({
-        x,
-        y: 60 + Math.random() * 60,
-        vy: 3 + Math.random() * 5,
-        size: 4 + Math.random() * 5,
-        length: 15 + Math.random() * 20
-      });
-    }
-
     function drawLogoText() {
       const { w } = sizeRef.current;
       ctx.save();
-      ctx.translate(w / 2, 80);
-      const flicker = Math.random() > 0.97 ? 0.6 : 1;
-      ctx.shadowBlur = 80 * flicker;
-      ctx.shadowColor = '#991b1b';
+      ctx.translate(w / 2, 120);
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '130px "Arial Black"';
-      ctx.fillStyle = '#000';
-      ctx.fillText('DarkForest', 0, 5);
-      const grad = ctx.createLinearGradient(0, -60, 0, 60);
-      grad.addColorStop(0, '#1e293b');
-      grad.addColorStop(0.4, '#7f1d1d');
-      grad.addColorStop(0.6, '#450a0a');
-      grad.addColorStop(1, '#1a0505');
-      ctx.fillStyle = grad;
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 6;
+      ctx.font = '900 100px "Chalkboard SE", "Comic Sans MS", sans-serif';
+      ctx.fillStyle = '#fde047'; // yellow-300
+      ctx.strokeStyle = '#0f172a'; // slate-900
+      ctx.lineWidth = 14;
+      ctx.lineJoin = 'round';
+
+      // Draw offset text for 3D effect
+      ctx.save();
+      ctx.translate(0, 8);
+      ctx.fillStyle = '#b45309'; // amber-700
+      ctx.fillText('DarkForest', 0, 0);
+      ctx.strokeText('DarkForest', 0, 0);
+      ctx.restore();
+
       ctx.strokeText('DarkForest', 0, 0);
       ctx.fillText('DarkForest', 0, 0);
+
+      // Subtitle
+      ctx.font = '900 30px "Chalkboard SE", "Comic Sans MS", sans-serif';
+      ctx.fillStyle = '#fbbf24';
+      ctx.lineWidth = 8;
+      ctx.translate(0, 70);
+      ctx.strokeText('BATTLE ARENA', 0, 0);
+      ctx.fillText('BATTLE ARENA', 0, 0);
+
       ctx.restore();
     }
 
@@ -173,85 +168,60 @@ const MenuBackgroundCanvas = forwardRef<MenuBackgroundCanvasRef>(function MenuBa
       const { w, h } = sizeRef.current;
       ctx.clearRect(0, 0, w, h);
 
-      const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h));
-      bgGrad.addColorStop(0, '#0f172a');
-      bgGrad.addColorStop(0.7, '#020617');
-      bgGrad.addColorStop(1, '#000');
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, w, h);
-
-      for (const p of particles) {
-        p.y += p.vy;
-        p.x += p.vx;
-        if (p.y < -20) {
-          p.y = h + 20;
-          p.x = Math.random() * w;
-        }
-        ctx.fillStyle = `rgba(153, 27, 27, ${p.opacity})`;
+      // Starburst cartoon background
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      const timeOffset = frameRef.current * 0.2;
+      const numRays = 16;
+      ctx.fillStyle = '#0f766e'; // teal-700
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.fillStyle = '#14b8a6'; // teal-500
+      for (let i = 0; i < numRays; i++) {
+        const angle1 = (i / numRays) * Math.PI * 2 + timeOffset;
+        const angle2 = ((i + 0.5) / numRays) * Math.PI * 2 + timeOffset;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      const splatters = splattersRef.current;
-      for (let i = splatters.length - 1; i >= 0; i--) {
-        const s = splatters[i];
-        s.x += s.vx;
-        s.y += s.vy;
-        s.vy += s.gravity;
-        s.life -= s.decay;
-        ctx.globalAlpha = s.life;
-        ctx.fillStyle = s.color;
-        ctx.beginPath();
-        const stretch = 1 + Math.abs(s.vy) * 0.15;
-        ctx.ellipse(s.x, s.y, s.size, s.size * stretch, Math.atan2(s.vy, s.vx), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        if (s.life <= 0 || s.y > h) splatters.splice(i, 1);
-      }
-
-      const bloodPuddles = bloodPuddlesRef.current;
-      for (let i = bloodPuddles.length - 1; i >= 0; i--) {
-        const p = bloodPuddles[i];
-        p.radius += p.growSpeed;
-        p.opacity -= 0.0008;
-        if (p.radius > p.maxRadius) p.growSpeed = 0;
-        ctx.save();
-        ctx.globalAlpha = p.opacity;
-        ctx.fillStyle = '#2d0606';
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y, p.radius, p.radius * 0.3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        if (p.opacity <= 0) bloodPuddles.splice(i, 1);
-      }
-
-      if (Math.random() > 0.7) createBloodDrop();
-
-      const bloodDrops = bloodDropsRef.current;
-      for (let i = bloodDrops.length - 1; i >= 0; i--) {
-        const d = bloodDrops[i];
-        d.y += d.vy;
-        ctx.fillStyle = '#7f1d1d';
-        ctx.beginPath();
-        ctx.moveTo(d.x - d.size / 2, d.y - d.length);
-        ctx.lineTo(d.x + d.size / 2, d.y - d.length);
-        ctx.lineTo(d.x, d.y);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(angle1) * Math.max(w, h), Math.sin(angle1) * Math.max(w, h));
+        ctx.lineTo(Math.cos(angle2) * Math.max(w, h), Math.sin(angle2) * Math.max(w, h));
         ctx.closePath();
         ctx.fill();
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
-        ctx.fill();
-        if (d.y > h - 15) {
-          bloodPuddles.push({
-            x: d.x,
-            y: d.y,
-            radius: 2,
-            maxRadius: 30 + Math.random() * 40,
-            growSpeed: 0.4,
-            opacity: 1.0
-          });
-          bloodDrops.splice(i, 1);
+      }
+      // Inner glow/vignette
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.8);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.restore();
+
+      const particles = particlesRef.current;
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.color) {
+          // Confetti / spawned particles
+          p.vy += 0.4; // gravity
+          p.opacity -= 0.015;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.opacity);
+          ctx.fillStyle = p.color;
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.x * 0.05);
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+          ctx.restore();
+          if (p.opacity <= 0 || p.y > h + 50) particles.splice(i, 1);
+        } else {
+          // Background floating dust
+          if (p.y < -20) {
+            p.y = h + 20;
+            p.x = Math.random() * w;
+          }
+          ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity * 0.5})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
 

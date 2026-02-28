@@ -65,7 +65,7 @@ const GameCanvas: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboard, setLeaderboard] = useState<{ rank?: number; playerId?: string; ogpId?: string; points?: number; [k: string]: unknown }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ rank?: number; playerId?: string; ogpId?: string; points?: number;[k: string]: unknown }[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const playFunSdkRef = useRef<any>(null);
   const menuBgRef = useRef<MenuBackgroundCanvasRef>(null);
@@ -3227,36 +3227,36 @@ const GameCanvas: React.FC = () => {
 
       {/* Menu / Hero Select */}
       {(uiState.status === 'MENU' || uiState.status === 'HERO_SELECT') && (
-        <div className="absolute inset-0 flex flex-col items-center justify-start pt-8 text-white select-none overflow-auto" style={{ backgroundColor: '#020617', fontFamily: "'Arial Black', sans-serif" }}>
+        <div className="absolute inset-0 flex flex-col items-center justify-start pt-8 text-white select-none overflow-auto" style={{ fontFamily: "'Chalkboard SE', 'Comic Sans MS', sans-serif" }}>
           <MenuBackgroundCanvas ref={menuBgRef} />
 
           {uiState.status === 'MENU' ? (
             <>
               <div className="text-center mb-10 relative z-10 title-glow">
-                <div className="h-[120px]" />
-                <p className="text-red-950 font-black uppercase tracking-tighter text-xs mt-4 opacity-60">Darkness awaits those who wander</p>
+                <div className="h-[160px]" />
+                <p className="text-yellow-200 font-black tracking-widest text-sm mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">READY FOR CHAOS?</p>
               </div>
 
               <div className="w-full max-w-[500px] flex flex-col gap-6 relative z-10 px-4">
-                <div className="horror-menu-block">
+                <div className="cartoon-panel">
                   <div className="flex justify-between items-center mb-6">
-                    <div className="text-red-600 italic font-black text-2xl tracking-tighter">ARENA MASTER</div>
-                    <div className="horror-badge font-bold flex items-center gap-2">
-                      <span className="w-2 h-2 bg-red-600 rounded-full" />
-                      2 SLOTS
+                    <div className="text-white font-black text-2xl drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">QUICK PLAY</div>
+                    <div className="cartoon-badge flex items-center gap-2">
+                      <span className="w-3 h-3 bg-green-500 rounded-full border-2 border-slate-900" />
+                      ONLINE
                     </div>
                   </div>
                   <div className="flex flex-col gap-4">
                     <button
                       onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } })); }}
                       disabled={isCreatingRoom}
-                      className="horror-btn horror-btn-primary text-xl"
+                      className="cartoon-btn cartoon-btn-primary text-xl"
                     >
-                      Create New Arena
+                      Create Custom Arena
                     </button>
                     <button
                       onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } })); }}
-                      className="horror-btn horror-btn-secondary"
+                      className="cartoon-btn cartoon-btn-secondary"
                     >
                       Select Your Hero
                     </button>
@@ -3264,17 +3264,17 @@ const GameCanvas: React.FC = () => {
                 </div>
 
                 {openRooms.length > 0 && (
-                  <div className="horror-menu-block">
+                  <div className="cartoon-panel">
                     <div className="flex justify-between items-center mb-4">
-                      <div className="text-slate-500 font-bold text-sm uppercase">Active Sessions</div>
-                      <div className="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
+                      <div className="text-slate-300 font-bold text-sm uppercase">Active Sessions</div>
+                      <div className="text-green-400 text-xs font-bold animate-pulse">● JOIN NOW</div>
                     </div>
-                    <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                       {openRooms.map((room) => (
-                        <div key={room.roomId} className="horror-arena-card">
+                        <div key={room.roomId} className="cartoon-arena-card">
                           <div>
-                            <div className="text-red-200 font-bold">{room.creatorName}&apos;s Arena</div>
-                            <div className="text-slate-600 text-xs font-bold uppercase">
+                            <div className="text-yellow-400 font-black text-lg drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">{room.creatorName}'s Arena</div>
+                            <div className="text-slate-400 text-sm font-bold">
                               Players: {room.playerCount} / {room.maxPlayers ?? 2}
                               {room.gameMode === 'ctf' && ' • CTF'}
                             </div>
@@ -3287,9 +3287,9 @@ const GameCanvas: React.FC = () => {
                               }
                             }}
                             disabled={isJoiningRoom || room.playerCount >= (room.maxPlayers ?? 2)}
-                            className="horror-btn horror-btn-primary py-2 px-6 w-auto text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="cartoon-btn cartoon-btn-primary py-2 px-6 w-auto text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'Join'}
+                            {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'JOIN'}
                           </button>
                         </div>
                       ))}
@@ -3300,15 +3300,15 @@ const GameCanvas: React.FC = () => {
                 <div className="flex gap-4">
                   <button
                     onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setShowRules(true); }}
-                    className="horror-btn horror-btn-secondary flex-1 text-sm"
+                    className="cartoon-btn cartoon-btn-purple flex-1 text-sm"
                   >
-                    Rules
+                    RULES
                   </button>
                   <button
                     onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setShowLeaderboard(true); fetchLeaderboard(); }}
-                    className="horror-btn horror-btn-gold flex-1 text-sm"
+                    className="cartoon-btn cartoon-btn-pink flex-1 text-sm"
                   >
-                    Top Survivors
+                    LEADERBOARD
                   </button>
                 </div>
               </div>
@@ -3397,7 +3397,7 @@ const GameCanvas: React.FC = () => {
                 <div className="flex gap-4 mt-auto">
                   <button
                     onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'MENU', actionParams: undefined })); }}
-                    className="flex-1 horror-btn horror-btn-secondary"
+                    className="flex-1 cartoon-btn cartoon-btn-secondary !w-auto"
                   >
                     BACK
                   </button>
@@ -3410,7 +3410,7 @@ const GameCanvas: React.FC = () => {
                         joinOpenRoom(uiState.actionParams.room);
                       }
                     }}
-                    className="flex-2 horror-btn horror-btn-primary"
+                    className="flex-2 cartoon-btn cartoon-btn-primary !w-auto"
                   >
                     {uiState.actionParams?.type === 'create' ? 'CREATE ARENA' : uiState.actionParams?.type === 'join' ? 'JOIN ARENA' : 'ENTER ARENA'}
                   </button>
