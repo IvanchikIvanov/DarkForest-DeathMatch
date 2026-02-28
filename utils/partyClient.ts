@@ -31,6 +31,7 @@ export interface PartyClientCallbacks {
     onStateUpdate: (state: any, hostId: string | null) => void;
     onConnect: (playerId: string, isHost: boolean) => void;
     onClose: () => void;
+    onOpen?: () => void;
     onError: (error: Event) => void;
 }
 
@@ -61,10 +62,13 @@ export class PartyClient {
             room: roomId,
             party: "main",
             query: { heroType },
+            maxRetries: 10,
+            connectionTimeout: 10000,
         });
 
         this.socket.addEventListener('open', () => {
             console.log('[PartyClient] Connected to PartyKit server');
+            this.callbacks.onOpen?.();
         });
 
         this.socket.addEventListener('message', (event) => {

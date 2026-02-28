@@ -106,6 +106,9 @@ const GameCanvas: React.FC = () => {
         console.log('[GameCanvas] Disconnected');
         setConnectionError('Connection lost');
       },
+      onOpen: () => {
+        setConnectionError(null);
+      },
       onError: (error) => {
         console.error('[GameCanvas] Error:', error);
         setConnectionError('Connection error');

@@ -1403,11 +1403,17 @@ export default class GameRoom implements Party.Server {
     this.state.lastMinigunSpawnTime = 0;
   }
 
+  private broadcastFrame = 0;
+
   startGameLoop() {
     if (this.gameLoop) return;
     this.gameLoop = setInterval(() => {
       this.updateGame();
-      this.broadcast();
+      this.broadcastFrame++;
+      // Broadcast at 30fps to reduce network load and lag (physics still 60fps)
+      if (this.broadcastFrame % 2 === 0) {
+        this.broadcast();
+      }
     }, 1000 / 60);
   }
 
