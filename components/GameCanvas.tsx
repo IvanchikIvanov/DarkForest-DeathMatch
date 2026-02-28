@@ -3320,8 +3320,8 @@ const GameCanvas: React.FC = () => {
                 </div>
               </div>
 
-              {/* Menu panel — right, opposite hero, compact */}
-              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] self-center w-full max-w-[320px]">
+              {/* Menu panel — right, opposite hero, compact, lower than center */}
+              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-4 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] self-center w-full max-w-[320px] translate-y-[50%]">
                 {uiState.actionParams?.type === 'create' && (
                   <>
                     <div className="mb-2 p-2 bg-slate-700 rounded-lg border-2 border-slate-600">
