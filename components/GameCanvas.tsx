@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS, CTF_MATCH_DURATION, CTF_BASE_RADIUS } from '../constants';
 import { GameState, PlayerInput, Bomb, Obstacle, Unicorn, Satan, ShurikenPickup, ShurikenProjectile, BurningGrenadePickup, BurningGrenade, FireZone, MinigunPickup, ElectricPanel, Flag } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
-import { Trophy, Users, Sword, User, Bomb as BombIcon } from 'lucide-react';
+import { Trophy, Users, Sword, User, Bomb as BombIcon, BookOpen, Medal } from 'lucide-react';
 import { PartyClient, LobbyClient, generateRoomId, type OpenRoom } from '../utils/partyClient';
 
 const GameCanvas: React.FC = () => {
@@ -62,11 +62,29 @@ const GameCanvas: React.FC = () => {
   const pendingRoomInfoRef = useRef<{ creatorName: string; maxPlayers: number; gameMode: 'deathmatch' | 'ctf' } | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showRules, setShowRules] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<{ rank?: number; playerId?: string; ogpId?: string; points?: number; [k: string]: unknown }[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const playFunSdkRef = useRef<any>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const fetchLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch('/api/leaderboard');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed');
+      setLeaderboard(Array.isArray(data) ? data : []);
+    } catch {
+      setLeaderboard([]);
+    } finally {
+      setLeaderboardLoading(false);
+    }
   }, []);
 
   // Assets no longer loaded - all rendering is vector-based
@@ -106,6 +124,7 @@ const GameCanvas: React.FC = () => {
         }
         const token = playFunSdkRef.current?.sessionToken;
         if (token) partyClientRef.current?.sendAuthSession(token);
+        playFunSdkRef.current?.refreshPointsAndMultiplier?.();
       },
       onClose: () => {
         console.log('[GameCanvas] Disconnected');
@@ -153,13 +172,18 @@ const GameCanvas: React.FC = () => {
     });
   }, []);
 
-  // --- Refresh Play Fun points on VICTORY ---
+  // --- Refresh Play Fun points on VICTORY and periodically in LOBBY/PLAYING ---
   const prevStatusRef = useRef(uiState.status);
   useEffect(() => {
     if (prevStatusRef.current !== 'VICTORY' && uiState.status === 'VICTORY') {
       playFunSdkRef.current?.refreshPointsAndMultiplier?.();
     }
     prevStatusRef.current = uiState.status;
+  }, [uiState.status]);
+  useEffect(() => {
+    if (uiState.status !== 'LOBBY' && uiState.status !== 'PLAYING') return;
+    const iv = setInterval(() => playFunSdkRef.current?.refreshPointsAndMultiplier?.(), 15000);
+    return () => clearInterval(iv);
   }, [uiState.status]);
 
   // --- Initialize Lobby Client ---
@@ -1698,7 +1722,7 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // Draw Flames - orange/red expanding cones
+    // Draw Flames - dense stream with ellipses along direction
     if ((state as any).flames) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -1707,20 +1731,60 @@ const GameCanvas: React.FC = () => {
         if (!flame.active) return;
 
         const normalizedLife = Math.max(0, flame.life / (flame.maxLife || 0.5));
-
-        const alpha = normalizedLife;
+        const size = flame.size || 20;
         const r = 255;
         const g = Math.floor(180 * normalizedLife + 40);
         const b = Math.floor(30 * normalizedLife);
 
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        const vx = flame.vel?.x ?? 1;
+        const vy = flame.vel?.y ?? 0;
+        const angle = Math.atan2(vy, vx);
+        const len = Math.sqrt(vx * vx + vy * vy) || 1;
+        const stretch = Math.min(2.5, 1 + len / 400);
+
+        const grad = ctx.createRadialGradient(
+          flame.pos.x, flame.pos.y, 0,
+          flame.pos.x, flame.pos.y, size * stretch
+        );
+        grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${normalizedLife * 0.95})`);
+        grad.addColorStop(0.5, `rgba(${r}, ${Math.floor(g * 0.7)}, ${b}, ${normalizedLife * 0.6})`);
+        grad.addColorStop(1, `rgba(200, 40, 0, 0)`);
+
+        ctx.fillStyle = grad;
+        ctx.save();
+        ctx.translate(flame.pos.x, flame.pos.y);
+        ctx.rotate(angle);
         ctx.beginPath();
-        // Draw directly at flame pos without translate to handle lighter blending cleanly
-        ctx.arc(flame.pos.x, flame.pos.y, flame.size || 20, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, size * stretch, size / stretch, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       });
       ctx.restore();
     }
+
+    // Nozzle cone glow when player firing flamethrower
+    Object.values(state.players || {}).forEach((p: any) => {
+      if (!p?.active || !p?.hasFlamethrower || !p?.isFlamethrowerFiring) return;
+      const angle = p.angle ?? -Math.PI / 2;
+      const tipX = p.pos.x + Math.cos(angle) * 90;
+      const tipY = p.pos.y + Math.sin(angle) * 90;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(p.pos.x, p.pos.y, 0, tipX, tipY, 120);
+      g.addColorStop(0, 'rgba(255, 200, 80, 0.5)');
+      g.addColorStop(0.4, 'rgba(255, 100, 30, 0.35)');
+      g.addColorStop(0.8, 'rgba(220, 50, 0, 0.15)');
+      g.addColorStop(1, 'rgba(180, 20, 0, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(p.pos.x + Math.cos(angle - 0.3) * 40, p.pos.y + Math.sin(angle - 0.3) * 40);
+      ctx.lineTo(tipX + Math.cos(angle - 0.25) * 80, tipY + Math.sin(angle - 0.25) * 80);
+      ctx.lineTo(tipX + Math.cos(angle + 0.25) * 80, tipY + Math.sin(angle + 0.25) * 80);
+      ctx.lineTo(p.pos.x + Math.cos(angle + 0.3) * 40, p.pos.y + Math.sin(angle + 0.3) * 40);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
 
 
     const drawSword = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number) => {
@@ -3092,6 +3156,71 @@ const GameCanvas: React.FC = () => {
         <div className="flex items-center gap-2 text-pink-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-pink-400">L-CLICK</kbd></div>
       </div>
 
+      {/* Rules Modal */}
+      {showRules && (uiState.status === 'MENU' || uiState.status === 'HERO_SELECT') && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowRules(false)}>
+          <div className="bg-slate-800 border-4 border-slate-600 rounded-2xl p-6 max-w-md max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-black text-orange-500">RULES & POINTS</h3>
+              <button onClick={() => setShowRules(false)} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+            </div>
+            <div className="space-y-4 text-slate-300 text-sm">
+              <p><strong className="text-white">How to play:</strong> WASD move, L-CLICK attack/shoot, R-CLICK throw sword/grenade. Collect weapons, eliminate opponents. Last survivor wins.</p>
+              <p><strong className="text-orange-400">Play Fun Points:</strong></p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Kill: +50 pts</li>
+                <li>Victory: +200 pts</li>
+                <li>Participation: +25 pts</li>
+              </ul>
+              <p className="text-slate-500 text-xs">Play via play.fun (embed) and log in to earn points. Points are saved at the end of each match. Configure game rules in Play Fun dashboard if points don&apos;t appear.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard Modal */}
+      {showLeaderboard && (uiState.status === 'MENU' || uiState.status === 'HERO_SELECT') && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowLeaderboard(false)}>
+          <div className="bg-slate-800 border-4 border-amber-600 rounded-2xl p-6 max-w-md max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-black text-amber-500 flex items-center gap-2"><Medal size={24} /> LEADERBOARD</h3>
+              <button onClick={() => setShowLeaderboard(false)} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+            </div>
+            {leaderboardLoading ? (
+              <p className="text-slate-400 text-center py-8">Loading...</p>
+            ) : leaderboard.length === 0 ? (
+              <p className="text-slate-500 text-center py-8">No scores yet. Play via play.fun to earn points!</p>
+            ) : (
+              <div className="space-y-2">
+                {leaderboard.map((entry, i) => {
+                  const obj = entry as Record<string, unknown>;
+                  let pts: number | undefined;
+                  let label: string;
+                  if (typeof obj?.points === 'number') {
+                    pts = obj.points;
+                    label = (obj.playerId ?? obj.ogpId ?? obj.wallet ?? obj.displayName ?? `Player ${i + 1}`) as string;
+                  } else {
+                    const entries = Object.entries(obj ?? {});
+                    const numEntry = entries.find(([, v]) => typeof v === 'number');
+                    pts = numEntry?.[1] as number;
+                    label = (numEntry ? (numEntry[0].length > 20 ? numEntry[0].slice(0, 8) + '...' : numEntry[0]) : `Player ${i + 1}`);
+                  }
+                  const short = label.length > 20 ? label.slice(0, 10) + '...' + label.slice(-4) : label;
+                  return (
+                    <div key={i} className="flex items-center justify-between py-2 px-3 bg-slate-700/80 rounded-lg">
+                      <span className="font-bold text-amber-400 w-8">#{i + 1}</span>
+                      <span className="text-slate-300 truncate flex-1 mx-2">{short}</span>
+                      <span className="font-black text-white">{pts ?? '-'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-slate-500 text-xs mt-4">Play via play.fun and log in to earn points.</p>
+          </div>
+        </div>
+      )}
+
       {/* Connect Wallet Modal (REMOVED) */}
 
       {/* Menu / Hero Select */}
@@ -3173,6 +3302,20 @@ const GameCanvas: React.FC = () => {
                     ))
                   )}
                 </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRules(true)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-700/80 hover:bg-slate-600 border-2 border-slate-600 rounded-xl font-bold text-slate-300 transition-colors"
+                >
+                  <BookOpen size={18} /> RULES
+                </button>
+                <button
+                  onClick={() => { setShowLeaderboard(true); fetchLeaderboard(); }}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-amber-700/80 hover:bg-amber-600 border-2 border-amber-600 rounded-xl font-bold text-amber-200 transition-colors"
+                >
+                  <Medal size={18} /> LEADERBOARD
+                </button>
               </div>
             </div>
           ) : (

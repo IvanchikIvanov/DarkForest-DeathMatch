@@ -52,6 +52,7 @@ interface Player extends Entity {
   hasMinigun: boolean;
   hasFlamethrower: boolean;
   flamethrowerCooldown?: number;
+  isFlamethrowerFiring?: boolean;
   score: number;
   speedMod: number;      // Movement speed multiplier (1 = base)
   gunCooldown: number;   // Cooldown after shooting (lower = faster fire)
@@ -829,7 +830,7 @@ const createFlame = (pos: Vector2, angle: number, ownerId: string): Flame => ({
   active: true,
   life: FLAME_LIFESPAN,
   maxLife: FLAME_LIFESPAN,
-  size: 15 + Math.random() * 15
+  size: 18 + Math.random() * 12
 });
 
 // Spawn herd of big unicorns from random arena edge, running across
@@ -2147,6 +2148,7 @@ export default class GameRoom implements Party.Server {
       const dx = input.mouse.x - player.pos.x;
       const dy = input.mouse.y - player.pos.y;
       player.angle = Math.atan2(dy, dx);
+      (player as any).isFlamethrowerFiring = input.mouseDown && player.hasFlamethrower;
 
       // Burning grenade throw (right-click) - creates fire zone on impact. Kenny throws 5 grenades.
       player.isBlocking = false;
@@ -2273,10 +2275,11 @@ export default class GameRoom implements Party.Server {
           }
         } else if (player.hasFlamethrower) {
           const baseAngle = player.angle || 0;
-          // Spread angle
-          const spreadAngle = baseAngle + (Math.random() - 0.5) * FLAMETHROWER_SPREAD;
-          const flame = createFlame(player.pos, spreadAngle, pid);
-          newFlames.push(flame);
+          // Dense stream: 3 flames per tick with spread
+          for (let i = 0; i < 3; i++) {
+            const spreadAngle = baseAngle + (Math.random() - 0.5) * FLAMETHROWER_SPREAD;
+            newFlames.push(createFlame(player.pos, spreadAngle, pid));
+          }
           player.attackCooldown = FLAMETHROWER_COOLDOWN;
 
           // Little nozzle sparks
@@ -2794,9 +2797,10 @@ export default class GameRoom implements Party.Server {
   }
 
   broadcast() {
-    const { tileMap, particles, ...rest } = this.state;
+    const { tileMap, particles, flames, ...rest } = this.state;
     const cappedParticles = particles.slice(-80);
-    const payload = { ...rest, particles: cappedParticles, maxPlayers: this.maxPlayers };
+    const cappedFlames = flames.slice(-100);
+    const payload = { ...rest, particles: cappedParticles, flames: cappedFlames, maxPlayers: this.maxPlayers };
     const message = JSON.stringify({
       type: 'STATE',
       payload,
