@@ -3008,42 +3008,12 @@ const GameCanvas: React.FC = () => {
         pctx.clearRect(0, 0, w, h);
         pctx.save();
 
-        // Add starburst background
-        pctx.translate(w / 2, h / 2);
-        const numRays = 12;
-        const timeOffset = timeRef.current * 0.5;
-        pctx.fillStyle = '#0f766e'; // Base background (teal-700)
-        pctx.fillRect(-w / 2, -h / 2, w, h);
-
-        pctx.fillStyle = '#14b8a6'; // Rays (teal-500)
-        for (let i = 0; i < numRays; i++) {
-          const angle1 = (i / numRays) * Math.PI * 2 + timeOffset;
-          const angle2 = ((i + 0.5) / numRays) * Math.PI * 2 + timeOffset;
-          pctx.beginPath();
-          pctx.moveTo(0, 0);
-          pctx.lineTo(Math.cos(angle1) * Math.max(w, h), Math.sin(angle1) * Math.max(w, h));
-          pctx.lineTo(Math.cos(angle2) * Math.max(w, h), Math.sin(angle2) * Math.max(w, h));
-          pctx.closePath();
-          pctx.fill();
-        }
-
-        // Inner glow/vignette for background
-        const grad = pctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.8);
-        grad.addColorStop(0, 'rgba(0,0,0,0)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.5)');
-        pctx.fillStyle = grad;
-        pctx.fillRect(-w / 2, -h / 2, w, h);
-
-        pctx.restore();
-
-        pctx.save();
-
         // Idle animation (breathing)
         const breathe = Math.sin(timeRef.current * 2.5);
         const scaleY = 1 + breathe * 0.03;
         const scaleX = 1 - breathe * 0.01;
 
-        pctx.translate(w / 2, h * 0.7);
+        pctx.translate(w / 2, h * 0.78);
 
         // Drop shadow
         pctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -3053,7 +3023,7 @@ const GameCanvas: React.FC = () => {
         pctx.fill();
         pctx.filter = 'none';
 
-        pctx.scale(4.0 * scaleX, 4.0 * scaleY);
+        pctx.scale(3.6 * scaleX, 3.6 * scaleY);
         pctx.translate(0, -breathe * 2);
 
         const fakeP: any = {
@@ -3314,46 +3284,40 @@ const GameCanvas: React.FC = () => {
               </div>
             </>
           ) : (
-            /* Hero Select Screen — hero left, menu right, same height */
-            <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-stretch">
-              {/* Hero panel — left */}
-              <div className="flex-1 flex flex-col items-center justify-between bg-slate-800 rounded-2xl p-8 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] min-h-[400px] relative overflow-hidden">
-                {/* Background canvas filler */}
+            /* Hero Select Screen — hero left (no frame), menu right, lower on screen */
+            <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-stretch mt-24">
+              {/* Hero — left, no frame, full body */}
+              <div className="flex-1 flex flex-col items-center justify-end min-h-[500px] relative">
                 <canvas
                   ref={heroPreviewCanvasRef}
-                  width={500}
-                  height={500}
-                  className="bg-transparent absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none"
+                  width={420}
+                  height={580}
+                  className="bg-transparent pointer-events-none"
                 />
-                {/* Inner shadow overlay for depth */}
-                <div className="absolute inset-0 z-0 pointer-events-none shadow-[inset_0_4px_20px_rgba(0,0,0,0.5)] rounded-xl" />
-
-                <h2 className="text-3xl font-black text-white drop-shadow-md tracking-wide relative z-10 mt-2">CHOOSE YOUR FIGHTER</h2>
-
-                <div className="flex items-center justify-between w-full relative z-10 mt-auto mb-auto px-4">
+                <h2 className="text-2xl font-black text-white drop-shadow-md tracking-wide mt-2">CHOOSE YOUR FIGHTER</h2>
+                <div className="flex items-center justify-center gap-6 mt-3">
                   <button
                     onClick={() => {
                       const idx = HERO_ORDER.indexOf(selectedHero);
                       setSelectedHero(HERO_ORDER[(idx - 1 + HERO_ORDER.length) % HERO_ORDER.length]);
                     }}
-                    className="w-16 h-16 rounded-full bg-slate-800/80 hover:bg-slate-700 border-4 border-slate-500 flex items-center justify-center text-3xl font-black text-white shrink-0 transition-transform active:scale-90 shadow-[0_4px_10px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+                    className="w-14 h-14 rounded-full bg-slate-800/90 hover:bg-slate-700 border-2 border-slate-500 flex items-center justify-center text-2xl font-black text-white shrink-0 transition-transform active:scale-90"
                   >
                     ←
                   </button>
+                  <span className="font-black text-3xl text-slate-100 tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                    {selectedHero === 'kenny' ? 'KENNY' : selectedHero === 'cartman' ? 'CARTMAN' : selectedHero === 'kyle' ? 'KYLE' : selectedHero === 'stanNinja' ? 'STAN NINJA' : 'SNOOP DOGG'}
+                  </span>
                   <button
                     onClick={() => {
                       const idx = HERO_ORDER.indexOf(selectedHero);
                       setSelectedHero(HERO_ORDER[(idx + 1) % HERO_ORDER.length]);
                     }}
-                    className="w-16 h-16 rounded-full bg-slate-800/80 hover:bg-slate-700 border-4 border-slate-500 flex items-center justify-center text-3xl font-black text-white shrink-0 transition-transform active:scale-90 shadow-[0_4px_10px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+                    className="w-14 h-14 rounded-full bg-slate-800/90 hover:bg-slate-700 border-2 border-slate-500 flex items-center justify-center text-2xl font-black text-white shrink-0 transition-transform active:scale-90"
                   >
                     →
                   </button>
                 </div>
-
-                <span className="font-black text-4xl mb-4 text-slate-100 font-[Chalkboard SE] tracking-wider drop-shadow-[0_4px_6px_rgba(0,0,0,1)] relative z-10">
-                  {selectedHero === 'kenny' ? 'KENNY' : selectedHero === 'cartman' ? 'CARTMAN' : selectedHero === 'kyle' ? 'KYLE' : selectedHero === 'stanNinja' ? 'STAN NINJA' : 'SNOOP DOGG'}
-                </span>
               </div>
 
               {/* Menu panel — right */}
