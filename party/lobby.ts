@@ -3,12 +3,11 @@ import type * as Party from "partykit/server";
 // Room info stored in lobby
 interface RoomInfo {
   roomId: string;
-  betAmount: number; // in wei as string-safe number
-  betDisplay: string; // e.g. "0.001 ETH"
   creatorName: string;
   playerCount: number;
+  maxPlayers: number;
   createdAt: number;
-  contractRoomId?: number; // on-chain room ID from smart contract
+  gameMode?: 'deathmatch' | 'ctf';
 }
 
 export default class LobbyRoom implements Party.Server {
@@ -26,8 +25,7 @@ export default class LobbyRoom implements Party.Server {
   }
 
   onConnect(conn: Party.Connection) {
-    const rooms = Array.from(this.rooms.values());
-    console.log('[LOBBY] onConnect, sending ROOMS_LIST to client, count=', rooms.length);
+    const rooms = Array.from(this.rooms.values()).map(r => ({ ...r, maxPlayers: r.maxPlayers ?? 2 }));
     conn.send(JSON.stringify({ type: 'ROOMS_LIST', rooms }));
   }
 
@@ -42,16 +40,25 @@ export default class LobbyRoom implements Party.Server {
           // Game room creator registers a new open room
           const info: RoomInfo = {
             roomId: data.roomId,
-            betAmount: data.betAmount,
-            betDisplay: data.betDisplay || '0 ETH',
             creatorName: data.creatorName || 'Anonymous',
-            playerCount: 1,
+            playerCount: data.playerCount ?? 1,
+            maxPlayers: data.maxPlayers ?? 2,
             createdAt: Date.now(),
-            contractRoomId: data.contractRoomId,
+            gameMode: data.gameMode === 'ctf' ? 'ctf' : 'deathmatch',
           };
           this.rooms.set(data.roomId, info);
           await this.persistRooms();
           this.broadcastRooms();
+          break;
+        }
+
+        case 'UPDATE_PLAYER_COUNT': {
+          const r = this.rooms.get(data.roomId);
+          if (r) {
+            r.playerCount = data.playerCount ?? r.playerCount;
+            await this.persistRooms();
+            this.broadcastRooms();
+          }
           break;
         }
 
@@ -94,16 +101,25 @@ export default class LobbyRoom implements Party.Server {
             console.log('[LOBBY] REGISTER_ROOM received via HTTP, roomId=', data.roomId);
             const info: RoomInfo = {
               roomId: data.roomId,
-              betAmount: data.betAmount,
-              betDisplay: data.betDisplay || '0 ETH',
               creatorName: data.creatorName || 'Anonymous',
-              playerCount: 1,
+              playerCount: data.playerCount ?? 1,
+              maxPlayers: data.maxPlayers ?? 2,
               createdAt: Date.now(),
-              contractRoomId: data.contractRoomId,
+              gameMode: data.gameMode === 'ctf' ? 'ctf' : 'deathmatch',
             };
             this.rooms.set(data.roomId, info);
             await this.persistRooms();
             this.broadcastRooms();
+            return new Response('OK', { status: 200 });
+          }
+
+          case 'UPDATE_PLAYER_COUNT': {
+            const r = this.rooms.get(data.roomId);
+            if (r) {
+              r.playerCount = data.playerCount ?? r.playerCount;
+              await this.persistRooms();
+              this.broadcastRooms();
+            }
             return new Response('OK', { status: 200 });
           }
 
@@ -128,9 +144,8 @@ export default class LobbyRoom implements Party.Server {
 
     // GET returns current room list
     if (req.method === 'GET') {
-      return new Response(JSON.stringify({
-        rooms: Array.from(this.rooms.values()),
-      }), {
+      const rooms = Array.from(this.rooms.values()).map(r => ({ ...r, maxPlayers: r.maxPlayers ?? 2 }));
+      return new Response(JSON.stringify({ rooms }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -143,12 +158,8 @@ export default class LobbyRoom implements Party.Server {
   }
 
   broadcastRooms() {
-    const count = this.rooms.size;
-    console.log('[LOBBY] broadcastRooms, rooms=', count, Array.from(this.rooms.keys()));
-    const msg = JSON.stringify({
-      type: 'ROOMS_LIST',
-      rooms: Array.from(this.rooms.values()),
-    });
+    const rooms = Array.from(this.rooms.values()).map(r => ({ ...r, maxPlayers: r.maxPlayers ?? 2 }));
+    const msg = JSON.stringify({ type: 'ROOMS_LIST', rooms });
     for (const conn of this.room.getConnections()) {
       conn.send(msg);
     }

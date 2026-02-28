@@ -4,10 +4,7 @@ import '../index.css';
 
 export const metadata: Metadata = {
   title: 'DarkForest Arena',
-  description: 'Multiplayer arena battle game on Base',
-  other: {
-    'base:app_id': '698cdc0bb3590846b383984a',
-  },
+  description: 'Multiplayer arena battle game',
 };
 
 export default function RootLayout({
@@ -18,6 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <meta name="x-ogp-key" content={process.env.NEXT_PUBLIC_PLAYFUN_API_KEY || ''} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />

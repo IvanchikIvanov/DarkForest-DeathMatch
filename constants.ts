@@ -24,9 +24,15 @@ export const COLORS = {
   waterDeep: '#1d4ed8', // blue-700
   bush: '#15803d', // green-700
   stone: '#78716c', // stone-500
+  street: '#3f3f46', // asphalt
+  sidewalk: '#a1a1aa', // concrete
+  indoorFloor: '#854d0e', // wood planks
+  roof: '#991b1b', // red brick roof
+  stairs: '#b45309', // wooden stairs
   bomb: '#ec4899', // pink-500
   explosion: '#fbbf24', // amber-400
   explosionInner: '#ef4444', // red-500
+  flamethrower: '#ea580c', // orange-600
 };
 
 // Gameplay Balance
@@ -55,6 +61,19 @@ export const BOMB_FUSE_TIME = 2.0; // Seconds before explosion
 export const BOMB_COOLDOWN = 3.0; // Seconds between throws
 export const BOMB_THROW_DISTANCE = 200; // How far bomb is thrown
 
+// Flamethrower System
+export const FLAMETHROWER_DAMAGE_PER_TICK = 3;
+export const FLAMETHROWER_RANGE = 400; // Flame travel distance
+export const FLAMETHROWER_SPREAD = 0.5; // Cone angle
+export const FLAMETHROWER_COOLDOWN = 0.05; // Rapid fire
+export const FLAME_LIFESPAN = 0.5; // How long flames exist
+export const FLAME_SPEED = 500;
+export const FLAME_HIT_RADIUS = 20;
+
+// CTF
+export const CTF_MATCH_DURATION = 180; // 3 min
+export const CTF_BASE_RADIUS = 150;
+
 // Terrain Effects
 export const WATER_SPEED_MOD = 0.5; // 50% slower in water
 export const BUSH_SPEED_MOD = 0.7; // 30% slower in bushes
@@ -67,6 +86,11 @@ export const TILE_GRASS = 3;
 export const TILE_WATER = 4;
 export const TILE_BUSH = 5;
 export const TILE_STONE = 6; // Non-walkable rock
+export const TILE_STREET = 7;
+export const TILE_SIDEWALK = 8;
+export const TILE_INDOOR_FLOOR = 9;
+export const TILE_ROOF = 10;
+export const TILE_STAIRS = 11;
 
 // Obstacle Types
 export const OBSTACLE_TREE = 'tree';

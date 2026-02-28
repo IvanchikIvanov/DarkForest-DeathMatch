@@ -4,25 +4,25 @@ import PartySocket from "partysocket";
 // - In production: set VITE_PARTYKIT_HOST to your deployed PartyKit URL (e.g., "duel-arena.username.partykit.dev")
 // - In development: falls back to localhost:1999
 const getPartyKitHost = (): string => {
-  // Check window override first (for runtime config)
-  if (typeof window !== 'undefined' && (window as any).__PARTYKIT_HOST__) {
-    const host = (window as any).__PARTYKIT_HOST__;
-    console.log('[PartyClient] Using PartyKit host from window override:', host);
-    return host;
-  }
-  
-  // Check env variable (supports both Vite and Next.js)
-  const envHost = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PARTYKIT_HOST
-    ? process.env.NEXT_PUBLIC_PARTYKIT_HOST
-    : (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PARTYKIT_HOST) || '';
-  if (envHost && envHost.trim() !== '' && envHost !== 'localhost:1999') {
-    console.log('[PartyClient] Using PartyKit host from env:', envHost);
-    return envHost.trim();
-  }
-  
-  // Fallback to localhost for dev
-  console.log('[PartyClient] Using localhost (dev mode)');
-  return "localhost:1999";
+    // Check window override first (for runtime config)
+    if (typeof window !== 'undefined' && (window as any).__PARTYKIT_HOST__) {
+        const host = (window as any).__PARTYKIT_HOST__;
+        console.log('[PartyClient] Using PartyKit host from window override:', host);
+        return host;
+    }
+
+    // Check env variable (supports both Vite and Next.js)
+    const envHost = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PARTYKIT_HOST
+        ? process.env.NEXT_PUBLIC_PARTYKIT_HOST
+        : (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PARTYKIT_HOST) || '';
+    if (envHost && envHost.trim() !== '' && envHost !== 'localhost:1999') {
+        console.log('[PartyClient] Using PartyKit host from env:', envHost);
+        return envHost.trim();
+    }
+
+    // Fallback to localhost for dev
+    console.log('[PartyClient] Using localhost (dev mode)');
+    return "localhost:1999";
 };
 
 const PARTYKIT_HOST = getPartyKitHost();
@@ -46,7 +46,7 @@ export class PartyClient {
     }
 
     // Create or join a room
-    connect(roomId: string): void {
+    connect(roomId: string, heroType: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' = 'kenny'): void {
         this.roomId = roomId;
 
         // Close existing connection if any
@@ -54,12 +54,13 @@ export class PartyClient {
             this.socket.close();
         }
 
-        console.log(`[PartyClient] Connecting to room: ${roomId} on host: ${PARTYKIT_HOST}`);
+        console.log(`[PartyClient] Connecting to room: ${roomId} on host: ${PARTYKIT_HOST} as ${heroType}`);
 
         this.socket = new PartySocket({
             host: PARTYKIT_HOST,
             room: roomId,
             party: "main",
+            query: { heroType },
         });
 
         this.socket.addEventListener('open', () => {
@@ -128,20 +129,24 @@ export class PartyClient {
         }));
     }
 
-    // Send room info (bet amount, creator name, contract ID) — host only, after connecting
-    sendRoomInfo(betAmount: number, betDisplay: string, creatorName: string, contractRoomId?: number): void {
+    sendAuthSession(sessionToken: string): void {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+        this.socket.send(JSON.stringify({
+            type: 'AUTH_SESSION',
+            sessionToken,
+        }));
+    }
+
+    sendRoomInfo(creatorName: string, maxPlayers?: number, gameMode?: 'deathmatch' | 'ctf'): void {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
             console.log('[PartyClient] sendRoomInfo skipped: socket not open', this.socket?.readyState);
             return;
         }
-        console.log('[PartyClient] sendRoomInfo', betDisplay, creatorName);
-
         this.socket.send(JSON.stringify({
             type: 'SET_ROOM_INFO',
-            betAmount,
-            betDisplay,
             creatorName,
-            contractRoomId: contractRoomId ?? -1,
+            maxPlayers: maxPlayers ?? 2,
+            gameMode: gameMode ?? 'deathmatch',
         }));
     }
 
@@ -190,13 +195,12 @@ export const generateRoomId = (): string => {
 // ============ LOBBY CLIENT ============
 
 export interface OpenRoom {
-    roomId: string;
-    betAmount: number;
-    betDisplay: string;
-    creatorName: string;
-    playerCount: number;
-    createdAt: number;
-    contractRoomId?: number; // on-chain room ID from smart contract
+  roomId: string;
+  creatorName: string;
+  playerCount: number;
+  maxPlayers: number;
+  createdAt: number;
+  gameMode?: 'deathmatch' | 'ctf';
 }
 
 export interface LobbyClientCallbacks {

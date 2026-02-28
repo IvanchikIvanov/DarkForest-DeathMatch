@@ -7,7 +7,8 @@ import {
   SWORD_ATTACK_DURATION, SHIELD_BLOCK_ANGLE, SWORD_ARC, SWORD_DAMAGE, SWORD_KNOCKBACK, SWORD_KNOCKBACK_SPEED, KNOCKBACK_FRICTION,
   BOMB_DAMAGE, BOMB_RADIUS, BOMB_FUSE_TIME, BOMB_COOLDOWN, BOMB_THROW_DISTANCE,
   WATER_SPEED_MOD, BUSH_SPEED_MOD,
-  TILE_FLOOR, TILE_WALL, TILE_WALL_TOP, TILE_GRASS, TILE_WATER, TILE_BUSH, TILE_STONE
+  TILE_FLOOR, TILE_WALL, TILE_WALL_TOP, TILE_GRASS, TILE_WATER, TILE_BUSH, TILE_STONE,
+  TILE_STREET, TILE_SIDEWALK, TILE_INDOOR_FLOOR, TILE_ROOF, TILE_STAIRS
 } from '../constants';
 
 // --- Helpers ---
@@ -34,100 +35,120 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
   const obstacles: Obstacle[] = [];
   const cols = Math.ceil(CANVAS_WIDTH / TILE_SIZE);
   const rows = Math.ceil(CANVAS_HEIGHT / TILE_SIZE);
-  const tileMap: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(TILE_FLOOR));
+  const tileMap: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(TILE_GRASS));
 
-  const centerX = cols / 2;
-  const centerY = rows / 2;
-  const arenaRadius = Math.min(cols, rows) / 2 - 2;
-
-  let seed = 12345;
+  // 1. Draw Streets (Cross pattern)
+  const streetWidth = 10;
+  const hStreetStart = Math.floor(rows / 2) - Math.floor(streetWidth / 2);
+  const vStreetStart = Math.floor(cols / 2) - Math.floor(streetWidth / 2);
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const d = Math.hypot(x - centerX, y - centerY);
+      const isHStreet = y >= hStreetStart && y < hStreetStart + streetWidth;
+      const isVStreet = x >= vStreetStart && x < vStreetStart + streetWidth;
 
-      if (d > arenaRadius) {
-        tileMap[y][x] = TILE_WALL_TOP;
-        if (y < rows - 1 && Math.hypot(x - centerX, (y + 1) - centerY) <= arenaRadius) {
-          tileMap[y][x] = TILE_WALL;
-        }
-      } else if (d > arenaRadius - 1) {
-        tileMap[y][x] = TILE_FLOOR;
-      } else {
-        seed++;
-        const rand = seededRandom(seed);
-        const rand2 = seededRandom(seed + 1000);
+      if (isHStreet || isVStreet) {
+        tileMap[y][x] = TILE_STREET;
+      }
+      // Sidewalks at the edge of streets
+      else if (
+        y === hStreetStart - 1 || y === hStreetStart + streetWidth ||
+        x === vStreetStart - 1 || x === vStreetStart + streetWidth
+      ) {
+        tileMap[y][x] = TILE_SIDEWALK;
+      }
+    }
+  }
 
-        // Default to floor or grass (50% each)
-        if (rand < 0.5) {
-          tileMap[y][x] = TILE_GRASS;
-        } else {
-          tileMap[y][x] = TILE_FLOOR;
-        }
+  // 2. Generate Houses
+  // Split into 4 quadrants
+  const quadrants = [
+    { startX: 2, endX: vStreetStart - 3, startY: 2, endY: hStreetStart - 3 },
+    { startX: vStreetStart + streetWidth + 2, endX: cols - 3, startY: 2, endY: hStreetStart - 3 },
+    { startX: 2, endX: vStreetStart - 3, startY: hStreetStart + streetWidth + 2, endY: rows - 3 },
+    { startX: vStreetStart + streetWidth + 2, endX: cols - 3, startY: hStreetStart + streetWidth + 2, endY: rows - 3 }
+  ];
 
-        // Water pools (8% chance, clusters)
-        if (rand > 0.92 && d < arenaRadius - 3) {
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const ny = y + dy;
-              const nx = x + dx;
-              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                const nd = Math.hypot(nx - centerX, ny - centerY);
-                if (nd < arenaRadius - 2) {
-                  tileMap[ny][nx] = TILE_WATER;
-                }
-              }
+  let objId = 0;
+
+  quadrants.forEach((q, qIndex) => {
+    // Generate 1-2 houses per quadrant
+    const numHouses = 2;
+    for (let h = 0; h < numHouses; h++) {
+      const houseWidth = 10 + Math.floor(Math.random() * 6);
+      const houseHeight = 8 + Math.floor(Math.random() * 5);
+
+      const px = q.startX + Math.floor(Math.random() * (q.endX - q.startX - houseWidth));
+      const py = q.startY + Math.floor(Math.random() * (q.endY - q.startY - houseHeight));
+
+      if (px < 0 || py < 0 || px + houseWidth >= cols || py + houseHeight >= rows) continue;
+
+      // 50% chance to be an open interior house, 50% chance to be a solid climbable roof
+      const isOpenHouse = Math.random() > 0.5;
+
+      for (let hy = 0; hy < houseHeight; hy++) {
+        for (let hx = 0; hx < houseWidth; hx++) {
+          const isEdge = hx === 0 || hy === 0 || hx === houseWidth - 1 || hy === houseHeight - 1;
+          const mapY = py + hy;
+          const mapX = px + hx;
+
+          if (isOpenHouse) {
+            // Check if this edge should be a door (middle of a wall)
+            const isDoor = (hy === houseHeight - 1 && hx >= houseWidth / 2 - 1 && hx <= houseWidth / 2 + 1) ||
+              (hx === houseWidth - 1 && hy >= houseHeight / 2 - 1 && hy <= houseHeight / 2 + 1 && qIndex % 2 === 0);
+
+            if (isEdge && !isDoor) {
+              tileMap[mapY][mapX] = TILE_WALL;
+            } else if (isEdge && isDoor) {
+              tileMap[mapY][mapX] = TILE_INDOOR_FLOOR;
+            } else {
+              tileMap[mapY][mapX] = TILE_INDOOR_FLOOR;
             }
+          } else {
+            // Climbable Roof Block
+            tileMap[mapY][mapX] = TILE_ROOF;
           }
         }
+      }
 
-        // Bush tile patches (10% chance)
-        if (rand > 0.82 && rand <= 0.92 && d < arenaRadius - 2) {
-          tileMap[y][x] = TILE_BUSH;
-        }
-
-        // Stone tile obstacles (non-walkable)
-        if (rand > 0.97 && d < arenaRadius - 4 && d > 3) {
-          tileMap[y][x] = TILE_STONE;
-        }
-
-        // Tree obstacles (3% chance)
-        if (rand2 > 0.97 && d < arenaRadius - 4 && d > 3) {
-          obstacles.push({
-            id: `tree-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'tree',
-            hp: 50,
-            radius: 24,
-            destroyed: false
-          });
-        }
-
-        // Rock obstacles (2% chance)
-        if (rand2 > 0.95 && rand2 <= 0.97 && d < arenaRadius - 4 && d > 3) {
-          obstacles.push({
-            id: `rock-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'rock',
-            hp: -1,
-            radius: 28,
-            destroyed: false
-          });
-        }
-
-        // Bush obstacles (2% chance)
-        if (rand2 > 0.93 && rand2 <= 0.95 && d < arenaRadius - 3 && d > 2) {
-          obstacles.push({
-            id: `bush-${x}-${y}`,
-            pos: { x: x * TILE_SIZE + TILE_SIZE / 2, y: y * TILE_SIZE + TILE_SIZE / 2 },
-            obstacleType: 'bush',
-            hp: 20,
-            radius: 20,
-            destroyed: false
-          });
+      // If it's a climbable house, add stairs outside
+      if (!isOpenHouse) {
+        let stairPlaced = false;
+        // Try to place stairs on the bottom edge
+        for (let sx = px + 2; sx < px + houseWidth - 2; sx++) {
+          if (!stairPlaced && tileMap[py + houseHeight][sx] === TILE_GRASS) {
+            tileMap[py + houseHeight][sx] = TILE_STAIRS;
+            stairPlaced = true;
+          }
         }
       }
     }
+
+    // Decorate quadrant with trees and bushes
+    for (let i = 0; i < 8; i++) {
+      const tx = q.startX + Math.floor(Math.random() * (q.endX - q.startX));
+      const ty = q.startY + Math.floor(Math.random() * (q.endY - q.startY));
+      if (tileMap[ty][tx] === TILE_GRASS) {
+        obstacles.push({
+          id: `tree-${objId++}`,
+          pos: { x: tx * TILE_SIZE + TILE_SIZE / 2, y: ty * TILE_SIZE + TILE_SIZE / 2 },
+          obstacleType: Math.random() > 0.5 ? 'tree' : 'bush',
+          hp: 50,
+          radius: 20,
+          destroyed: false
+        });
+      }
+    }
+  });
+
+  // Level boundaries (solid walls)
+  for (let x = 0; x < cols; x++) {
+    tileMap[0][x] = TILE_WALL;
+    tileMap[rows - 1][x] = TILE_WALL;
+  }
+  for (let y = 0; y < rows; y++) {
+    tileMap[y][0] = TILE_WALL;
+    tileMap[y][cols - 1] = TILE_WALL;
   }
 
   return { walls, tileMap, obstacles };
@@ -144,15 +165,7 @@ const getTileAt = (tileMap: number[][], x: number, y: number): number => {
 const checkWallCollision = (player: Player, tileMap: number[][]): boolean => {
   if (!tileMap) return false;
 
-  const checkPoint = (px: number, py: number) => {
-    const tx = Math.floor(px / TILE_SIZE);
-    const ty = Math.floor(py / TILE_SIZE);
-    if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return true;
-    const tile = tileMap[ty][tx];
-    return tile === TILE_WALL || tile === TILE_WALL_TOP || tile === TILE_STONE;
-  };
-
-  const r = player.radius;
+  const r = player.radius * 0.8;
   const points = [
     { x: player.pos.x + r, y: player.pos.y },
     { x: player.pos.x - r, y: player.pos.y },
@@ -163,6 +176,43 @@ const checkWallCollision = (player: Player, tileMap: number[][]): boolean => {
     { x: player.pos.x + r * 0.7, y: player.pos.y - r * 0.7 },
     { x: player.pos.x - r * 0.7, y: player.pos.y - r * 0.7 },
   ];
+
+  let onStairs = false;
+  for (const p of points) {
+    const tx = Math.floor(p.x / TILE_SIZE);
+    const ty = Math.floor(p.y / TILE_SIZE);
+    if (ty >= 0 && ty < tileMap.length && tx >= 0 && tx < tileMap[0].length) {
+      if (tileMap[ty][tx] === TILE_STAIRS) {
+        onStairs = true;
+        break;
+      }
+    }
+  }
+
+  const checkPoint = (px: number, py: number) => {
+    const tx = Math.floor(px / TILE_SIZE);
+    const ty = Math.floor(py / TILE_SIZE);
+    if (ty < 0 || ty >= tileMap.length || tx < 0 || tx >= tileMap[0].length) return true; // Map bounds
+    const tile = tileMap[ty][tx];
+
+    if (tile === TILE_STAIRS) return false;
+
+    // Hard walls always block
+    if (tile === TILE_WALL || tile === TILE_WALL_TOP || tile === TILE_STONE) return true;
+
+    if (onStairs) {
+      // While traversing stairs, player can overlap both ground and roof tiles safely
+      return false;
+    }
+
+    if (player.elevation === 1) {
+      // On roof: cannot walk on ground
+      return tile !== TILE_ROOF;
+    } else {
+      // On ground: cannot walk on roof
+      return tile === TILE_ROOF;
+    }
+  };
 
   return points.some(p => checkPoint(p.x, p.y));
 };
@@ -219,6 +269,7 @@ export const createPlayer = (id: string, index: number): Player => ({
   active: true,
   hp: PLAYER_HP,
   maxHp: PLAYER_HP,
+  elevation: 0, // Starts on the ground
   isDodging: false,
   dodgeTimer: 0,
   cooldown: 0,
@@ -389,6 +440,9 @@ export const updateGame = (
         const target = state.players[targetId];
         if (!target.active) return;
 
+        // Elevation check: Melee attacks only hit players on the same level
+        if (target.elevation !== player.elevation) return;
+
         const d = dist(player.pos, target.pos);
         if (d < SWORD_RANGE) {
           const angleToTarget = Math.atan2(target.pos.y - player.pos.y, target.pos.x - player.pos.x);
@@ -493,6 +547,39 @@ export const updateGame = (
 
     player.pos.x += player.vel.x * DT;
     player.pos.y += player.vel.y * DT;
+
+    // Elevation checking (Stairs logic)
+    // Run this BEFORE wall collision so that if we change elevation, we use the new elevation's collision rules.
+    if (state.tileMap) {
+      const r = player.radius * 0.8;
+      const pts = [
+        { x: player.pos.x + r, y: player.pos.y },
+        { x: player.pos.x - r, y: player.pos.y },
+        { x: player.pos.x, y: player.pos.y + r },
+        { x: player.pos.x, y: player.pos.y - r },
+        { x: player.pos.x + r * 0.7, y: player.pos.y + r * 0.7 },
+        { x: player.pos.x - r * 0.7, y: player.pos.y + r * 0.7 },
+        { x: player.pos.x + r * 0.7, y: player.pos.y - r * 0.7 },
+        { x: player.pos.x - r * 0.7, y: player.pos.y - r * 0.7 },
+      ];
+
+      let onStairs = false;
+      for (const p of pts) {
+        const tile = getTileAt(state.tileMap, p.x, p.y);
+        if (tile === TILE_STAIRS) {
+          onStairs = true;
+          break;
+        }
+      }
+
+      if (onStairs) {
+        if (player.vel.y < 0 && player.elevation === 0) {
+          player.elevation = 1; // Moving UP (into house)
+        } else if (player.vel.y > 0 && player.elevation === 1) {
+          player.elevation = 0; // Moving DOWN (towards street)
+        }
+      }
+    }
 
     // Wall collision
     if (state.tileMap && checkWallCollision(player, state.tileMap)) {

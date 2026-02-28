@@ -1,15 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS } from '../constants';
-import { GameState, PlayerInput, Bomb, Obstacle } from '../types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, PLAYER_HP, TILE_SIZE, BOMB_COOLDOWN, BOMB_RADIUS, CTF_MATCH_DURATION, CTF_BASE_RADIUS } from '../constants';
+import { GameState, PlayerInput, Bomb, Obstacle, Unicorn, Satan, ShurikenPickup, ShurikenProjectile, BurningGrenadePickup, BurningGrenade, FireZone, MinigunPickup, ElectricPanel, Flag } from '../types';
 import { createInitialState, createPlayer } from '../utils/gameLogic';
 import { Trophy, Users, Sword, User, Bomb as BombIcon } from 'lucide-react';
-import WalletConnect from './WalletConnect';
-import BetSelector from './BetSelector';
-import { useAccount } from 'wagmi';
-import { formatEther } from 'viem';
-import { useDuelArena, useNextRoomId, MIN_BET, MAX_BET, TREASURY_FEE_PERCENT } from '../hooks/useDuelArena';
 import { PartyClient, LobbyClient, generateRoomId, type OpenRoom } from '../utils/partyClient';
 
 const GameCanvas: React.FC = () => {
@@ -22,7 +17,6 @@ const GameCanvas: React.FC = () => {
   const mouseRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
   const mouseDownRef = useRef<boolean>(false);
   const mouseRightDownRef = useRef<boolean>(false);
-  const throwBombRef = useRef<boolean>(false);
 
   // Animation time for water effects
   const timeRef = useRef<number>(0);
@@ -43,10 +37,16 @@ const GameCanvas: React.FC = () => {
   const [isHost, setIsHost] = useState<boolean>(false);
 
   // UI State
-  const [uiState, setUiState] = useState({
+  interface UiState {
+    status: 'MENU' | 'HERO_SELECT' | 'LOBBY' | 'PLAYING' | 'VICTORY';
+    winner: string;
+    winnerTeamId?: 0 | 1 | null;
+    playerCount: number;
+    actionParams?: { type: 'create' } | { type: 'join', room: OpenRoom };
+  }
+  const [uiState, setUiState] = useState<UiState>({
     status: 'MENU',
     playerCount: 0,
-    assetsLoaded: false,
     winner: ''
   });
 
@@ -55,22 +55,14 @@ const GameCanvas: React.FC = () => {
 
   const [canvasSize, setCanvasSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 800, height: typeof window !== 'undefined' ? window.innerHeight : 600 });
 
-  // Wagmi wallet state
-  const { address: walletAddress, isConnected: walletConnected } = useAccount();
-  const { createRoom: contractCreateRoom, joinRoom: contractJoinRoom, finishGame: contractFinishGame, claimReward: contractClaimReward, isWriting } = useDuelArena();
-  const { data: nextRoomIdData, refetch: refetchNextRoomId } = useNextRoomId();
-
-  const [selectedBet, setSelectedBet] = useState<bigint | null>(null);
-  const [roomContractId, setRoomContractId] = useState<number | null>(null);
+  const [createRoomMaxPlayers, setCreateRoomMaxPlayers] = useState(2);
+  const [createRoomGameMode, setCreateRoomGameMode] = useState<'deathmatch' | 'ctf'>('deathmatch');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
-  const [roomBetAmount, setRoomBetAmount] = useState<bigint | null>(null);
-  const pendingRoomInfoRef = useRef<{ betAmount: bigint; betDisplay: string; creatorName: string; contractRoomId: number } | null>(null);
-  const [gameFinished, setGameFinished] = useState(false);
-  const [claimingReward, setClaimingReward] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
+  const pendingRoomInfoRef = useRef<{ creatorName: string; maxPlayers: number; gameMode: 'deathmatch' | 'ctf' } | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const playFunSdkRef = useRef<any>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -78,9 +70,6 @@ const GameCanvas: React.FC = () => {
   }, []);
 
   // Assets no longer loaded - all rendering is vector-based
-  useEffect(() => {
-    setUiState(prev => ({ ...prev, assetsLoaded: true }));
-  }, []);
 
   // --- Initialize PartyKit Client ---
   useEffect(() => {
@@ -90,8 +79,8 @@ const GameCanvas: React.FC = () => {
         setUiState({
           status: state.status,
           playerCount: Object.keys(state.players).length,
-          assetsLoaded: true,
-          winner: state.winnerId || ''
+          winner: state.winnerId || '',
+          winnerTeamId: (state as any).winnerTeamId
         });
         if (hostId && playerIdRef.current) {
           setIsHost(hostId === playerIdRef.current);
@@ -105,12 +94,13 @@ const GameCanvas: React.FC = () => {
         setConnectionError(null);
         if (host && pendingRoomInfoRef.current) {
           const p = pendingRoomInfoRef.current;
-          console.log('[GameCanvas] SENDING roomInfo to server, roomId=', partyClientRef.current?.getRoomId());
-          partyClientRef.current?.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
+          partyClientRef.current?.sendRoomInfo(p.creatorName, p.maxPlayers, p.gameMode);
           pendingRoomInfoRef.current = null;
         } else {
           console.log('[GameCanvas] NOT sending roomInfo: host=', host, 'hasPending=', !!pendingRoomInfoRef.current);
         }
+        const token = playFunSdkRef.current?.sessionToken;
+        if (token) partyClientRef.current?.sendAuthSession(token);
       },
       onClose: () => {
         console.log('[GameCanvas] Disconnected');
@@ -129,9 +119,44 @@ const GameCanvas: React.FC = () => {
     };
   }, []);
 
+  // --- Initialize Play Fun SDK ---
+  useEffect(() => {
+    const GAME_ID = process.env.NEXT_PUBLIC_PLAYFUN_GAME_ID;
+    if (!GAME_ID) return;
+
+    import('@playdotfun/game-sdk').then(({ default: OpenGameSDK }) => {
+      const sdk = new OpenGameSDK({ ui: { usePointsWidget: true } });
+      playFunSdkRef.current = sdk;
+      sdk.init({ gameId: GAME_ID }).then(() => {
+        const token = sdk.sessionToken;
+        if (token && partyClientRef.current?.isConnected()) {
+          partyClientRef.current.sendAuthSession(token);
+        }
+      });
+      sdk.on?.('LoginSuccess' as any, () => {
+        const token = sdk.sessionToken;
+        if (token && partyClientRef.current?.isConnected()) {
+          partyClientRef.current.sendAuthSession(token);
+        }
+      });
+      return () => {
+        playFunSdkRef.current = null;
+      };
+    });
+  }, []);
+
+  // --- Refresh Play Fun points on VICTORY ---
+  const prevStatusRef = useRef(uiState.status);
+  useEffect(() => {
+    if (prevStatusRef.current !== 'VICTORY' && uiState.status === 'VICTORY') {
+      playFunSdkRef.current?.refreshPointsAndMultiplier?.();
+    }
+    prevStatusRef.current = uiState.status;
+  }, [uiState.status]);
+
   // --- Initialize Lobby Client ---
   useEffect(() => {
-    const     lobby = new LobbyClient({
+    const lobby = new LobbyClient({
       onRoomsUpdate: (rooms) => {
         console.log('[GameCanvas] onRoomsUpdate', rooms.length, rooms.map(r => r.roomId));
         setOpenRooms(rooms);
@@ -145,100 +170,28 @@ const GameCanvas: React.FC = () => {
     };
   }, []);
 
-  // Show connect modal if not connected
-  useEffect(() => {
-    if (!walletConnected) {
-      const timer = setTimeout(() => setShowConnectModal(true), 500);
-      return () => clearTimeout(timer);
-    }
-    setShowConnectModal(false);
-  }, [walletConnected]);
-
-  const handleWalletConnect = (_address: string) => {
-    setShowConnectModal(false);
-  };
-
-  const handleWalletDisconnect = () => {
-    // wagmi handles state automatically
-  };
-
-  const createRoomWithBet = async () => {
-    if (!selectedBet && walletConnected) {
-      showToast('Please select bet amount', 'error');
-      return;
-    }
-
+  const createRoom = () => {
     setIsCreatingRoom(true);
-    let onChainRoomId: number = -1;
-    let actualBet = selectedBet || 0n; // Default to 0 for walletless
-
-    try {
-      if (walletConnected) {
-        // Read the nextRoomId BEFORE creating, so we know what ID the contract will assign
-        const { data: freshNextId } = await refetchNextRoomId();
-        if (freshNextId !== undefined) {
-          onChainRoomId = Number(freshNextId);
-          console.log('On-chain room ID will be:', onChainRoomId);
-        }
-
-        const txHash = await contractCreateRoom(actualBet);
-        if (txHash) {
-          console.log('Room created on-chain, tx:', txHash);
-          setRoomContractId(onChainRoomId);
-        }
-      }
-    } catch (error: any) {
-      console.error('Error with on-chain room creation:', error);
-      // If contract creation fails but they wanted to create one, we should probably stop
-      // unless we want to let them fall back to off-chain automatically.
-      // For now, let's just log and continue to create the off-chain room for testing.
-      showToast('Wallet transaction failed, creating off-chain test room', 'error');
-    }
-
-    setRoomBetAmount(actualBet);
     const newRoomId = generateRoomId();
     setRoomId(newRoomId);
-    const betDisplay = walletConnected ? formatEther(actualBet) + ' ETH' : 'TESTING (No Wager)';
-    const creatorName = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Anonymous';
-    pendingRoomInfoRef.current = { betAmount: actualBet, betDisplay, creatorName, contractRoomId: onChainRoomId };
-    console.log('[GameCanvas] createRoom roomId=', newRoomId, 'betDisplay=', betDisplay);
-    partyClientRef.current?.connect(newRoomId);
+    const creatorName = 'Anonymous';
+    pendingRoomInfoRef.current = { creatorName, maxPlayers: createRoomMaxPlayers, gameMode: createRoomGameMode };
+    console.log('[GameCanvas] createRoom roomId=', newRoomId);
+    partyClientRef.current?.connect(newRoomId, selectedHero);
     setTimeout(() => {
       if (pendingRoomInfoRef.current && partyClientRef.current?.isConnected()) {
         const p = pendingRoomInfoRef.current;
-        partyClientRef.current.sendRoomInfo(Number(p.betAmount), p.betDisplay, p.creatorName, p.contractRoomId);
+        partyClientRef.current.sendRoomInfo(p.creatorName, p.maxPlayers, p.gameMode);
         pendingRoomInfoRef.current = null;
       }
     }, 800);
-
     setIsCreatingRoom(false);
   };
 
-  // Join an open room from the lobby list
-  const joinOpenRoom = async (room: OpenRoom) => {
+  const joinOpenRoom = (room: OpenRoom) => {
     setIsJoiningRoom(true);
-
-    const betAmount = BigInt(room.betAmount);
-    setRoomBetAmount(betAmount);
-    setSelectedBet(betAmount);
-
-    try {
-      if (walletConnected && room.contractRoomId !== undefined && room.contractRoomId >= 0) {
-        setRoomContractId(room.contractRoomId);
-        const txHash = await contractJoinRoom(room.contractRoomId, betAmount);
-        if (txHash) {
-          console.log('Joined room on-chain, tx:', txHash, 'contractRoomId:', room.contractRoomId);
-        }
-      }
-    } catch (error: any) {
-      console.error('Error joining on-chain room:', error);
-      showToast('Wallet transaction failed, joining off-chain for testing', 'error');
-    }
-
-    // Always join the PartyKit room even if contract fails or wallet is not connected
     setRoomId(room.roomId);
-    partyClientRef.current?.connect(room.roomId);
-
+    partyClientRef.current?.connect(room.roomId, selectedHero);
     setIsJoiningRoom(false);
   };
 
@@ -246,20 +199,37 @@ const GameCanvas: React.FC = () => {
     partyClientRef.current?.startGame();
   };
 
-  // --- Input Handlers ---
+  // State for hero selection
+  const [selectedHero, setSelectedHero] = useState<'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg'>('cartman');
+  const heroPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const uiStateRef = useRef(uiState);
+  const selectedHeroRef = useRef(selectedHero);
+  uiStateRef.current = uiState;
+  selectedHeroRef.current = selectedHero;
+
+  const HERO_ORDER: ('kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg')[] = ['kenny', 'cartman', 'kyle', 'stanNinja', 'snoopDogg'];
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    keysRef.current.add(e.key.toLowerCase());
-    // E key for bomb
-    if (e.key.toLowerCase() === 'e') {
-      throwBombRef.current = true;
+    const k = e.key.toLowerCase();
+    keysRef.current.add(k);
+    if (uiState.status === 'PLAYING') {
+      if (['w', 'a', 's', 'd', ' '].includes(k)) e.preventDefault();
     }
-  }, []);
+    if (uiState.status === 'HERO_SELECT') {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const idx = HERO_ORDER.indexOf(selectedHero);
+        setSelectedHero(HERO_ORDER[(idx - 1 + HERO_ORDER.length) % HERO_ORDER.length]);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const idx = HERO_ORDER.indexOf(selectedHero);
+        setSelectedHero(HERO_ORDER[(idx + 1) % HERO_ORDER.length]);
+      }
+    }
+  }, [uiState.status, selectedHero]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     keysRef.current.delete(e.key.toLowerCase());
-    if (e.key.toLowerCase() === 'e') {
-      throwBombRef.current = false;
-    }
   }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -469,6 +439,78 @@ const GameCanvas: React.FC = () => {
             ctx.lineTo(tx + 35, ty + 30);
             ctx.lineTo(tx + 25, ty + TILE_SIZE);
             ctx.stroke();
+          } else if (tileIdx === 7) {
+            // Street tile - Asphalt with texture
+            ctx.fillStyle = '#3f3f46'; // zinc-700
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            // Asphalt noise dots
+            ctx.fillStyle = '#27272a'; // zinc-800
+            const seed = x * 11 + y * 17;
+            for (let i = 0; i < 15; i++) {
+              ctx.fillRect(tx + ((seed + i * 29) % Math.floor(TILE_SIZE)), ty + ((seed + i * 31) % Math.floor(TILE_SIZE)), 2, 2);
+            }
+            // Yellow dashed line in the middle occasionally
+            if (y % 2 === 0 && x % 4 !== 0) { // arbitrary pattern
+              ctx.fillStyle = '#facc15';
+              ctx.fillRect(tx + TILE_SIZE / 2 - 2, ty + 10, 4, TILE_SIZE - 20);
+            }
+          } else if (tileIdx === 8) {
+            // Sidewalk tile
+            ctx.fillStyle = '#a1a1aa'; // zinc-400
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            // Concrete cracks/lines
+            ctx.strokeStyle = '#71717a'; // zinc-500
+            ctx.lineWidth = 2;
+            ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+          } else if (tileIdx === 9) {
+            // Indoor Floor - Wood planks
+            ctx.fillStyle = '#854d0e'; // yellow-800
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#451a03'; // dark wood lines
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+              ctx.beginPath();
+              ctx.moveTo(tx, ty + (TILE_SIZE / 4) * i);
+              ctx.lineTo(tx + TILE_SIZE, ty + (TILE_SIZE / 4) * i);
+              ctx.stroke();
+            }
+            // Nail dots
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(tx + 4, ty + 10, 2, 2);
+            ctx.fillRect(tx + TILE_SIZE - 6, ty + 10, 2, 2);
+          } else if (tileIdx === 10) {
+            // Roof tile - Red brick shingles
+            ctx.fillStyle = '#991b1b'; // red-800
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#7f1d1d'; // darker red
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+              ctx.beginPath();
+              ctx.moveTo(tx, ty + (TILE_SIZE / 4) * i);
+              ctx.lineTo(tx + TILE_SIZE, ty + (TILE_SIZE / 4) * i);
+              ctx.stroke();
+            }
+            for (let j = 0; j < 4; j++) {
+              ctx.beginPath();
+              // stagger vertical lines
+              const offset = (j % 2 === 0) ? 0 : TILE_SIZE / 8;
+              ctx.moveTo(tx + offset + TILE_SIZE / 4, ty + (TILE_SIZE / 4) * j);
+              ctx.lineTo(tx + offset + TILE_SIZE / 4, ty + (TILE_SIZE / 4) * (j + 1));
+              ctx.stroke();
+            }
+          } else if (tileIdx === 11) {
+            // Stairs tile
+            ctx.fillStyle = '#b45309'; // amber-700
+            ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            // Horizontal steps
+            ctx.fillStyle = '#78350f'; // amber-900
+            for (let i = 0; i < 4; i++) {
+              ctx.fillRect(tx, ty + (i * 16) + 10, TILE_SIZE, 6);
+            }
+            // Side rails
+            ctx.fillStyle = '#fbbf24'; // amber-400
+            ctx.fillRect(tx + 2, ty, 6, TILE_SIZE);
+            ctx.fillRect(tx + TILE_SIZE - 8, ty, 6, TILE_SIZE);
           }
         }
       }
@@ -638,6 +680,629 @@ const GameCanvas: React.FC = () => {
       });
     }
 
+    // Draw unicorn herd (big pink unicorns with lush mane)
+    const drawBigUnicorn = (c: CanvasRenderingContext2D, u: Unicorn, t: number) => {
+      c.save();
+      c.translate(u.pos.x, u.pos.y);
+      const angle = Math.atan2(u.vel.y, u.vel.x) + Math.PI / 2;
+      c.rotate(angle);
+      const hop = Math.abs(Math.sin(t * 3)) * 5;
+      c.translate(0, -hop);
+
+      c.lineWidth = 4;
+      c.strokeStyle = '#000';
+
+      c.fillStyle = '#F472B6';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-40, 0, 25, 60, [10, 10, 15, 15]);
+        c.roundRect(15, 0, 25, 60, [10, 10, 15, 15]);
+      } else {
+        c.rect(-40, 0, 25, 60);
+        c.rect(15, 0, 25, 60);
+      }
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#DB2777';
+      c.beginPath();
+      c.moveTo(-35, 10);
+      c.quadraticCurveTo(-70, 30, -50, 80);
+      c.quadraticCurveTo(-40, 50, -35, 10);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#F472B6';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-50, -40, 100, 70, 30);
+      } else {
+        c.rect(-50, -40, 100, 70);
+      }
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#fdf2f8';
+      c.beginPath();
+      c.moveTo(0, -70);
+      c.lineTo(-8, -120);
+      c.lineTo(8, -120);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#F472B6';
+      c.beginPath();
+      c.ellipse(0, -75, 45, 55, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#FBCFE8';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-10, -70, 75, 40, [10, 20, 20, 10]);
+      } else {
+        c.rect(-10, -70, 75, 40);
+      }
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#DB2777';
+      c.beginPath();
+      c.moveTo(-30, -110);
+      c.lineTo(-50, -140);
+      c.lineTo(-15, -115);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.moveTo(30, -110);
+      c.lineTo(50, -140);
+      c.lineTo(15, -115);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.ellipse(20, -95, 14, 18, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(24, -95, 4, 0, Math.PI * 2);
+      c.fill();
+
+      c.strokeStyle = '#000';
+      c.lineWidth = 6;
+      c.lineCap = 'round';
+      for (let i = 0; i < 5; i++) {
+        c.beginPath();
+        c.moveTo(-35, -90 + i * 15);
+        c.quadraticCurveTo(-60, -80 + i * 15, -50, -60 + i * 15);
+        c.strokeStyle = (i % 2 === 0) ? '#DB2777' : '#FBCFE8';
+        c.stroke();
+      }
+
+      c.restore();
+    };
+
+    if (state.unicorns?.length) {
+      state.unicorns.forEach((u: Unicorn) => {
+        if (u.active) drawBigUnicorn(ctx, u, timeRef.current);
+      });
+    }
+
+    // Satan — rift opens, rises from below, strikes with lightning
+    const satan = (state as any).satan as Satan | null | undefined;
+    if (satan) {
+      const t = timeRef.current;
+      const riftOpen = satan.riftOpen ?? 0;
+      const riftW = 300;
+      const riftH = 500;
+
+      // 1. Lava in rift gap
+      if (riftOpen > 5) {
+        const grad = ctx.createLinearGradient(satan.pos.x, satan.pos.y - riftH / 2, satan.pos.x, satan.pos.y + riftH / 2);
+        grad.addColorStop(0, '#7f1d1d');
+        grad.addColorStop(0.5, '#dc2626');
+        grad.addColorStop(1, '#7f1d1d');
+        ctx.fillStyle = grad;
+        ctx.fillRect(satan.pos.x - riftOpen, satan.pos.y - riftH / 2, riftOpen * 2, riftH);
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 12; i++) {
+          const x = satan.pos.x + (Math.random() - 0.5) * riftOpen * 1.5;
+          const y = satan.pos.y - riftH / 2 + ((i * 0.3 + t * 2) % 1) * riftH;
+          const r = 15 + Math.sin(t + i) * 8;
+          ctx.fillStyle = '#f97316';
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      const drawSatanBolt = (x1: number, y1: number, x2: number, y2: number, thickness: number, alpha: number) => {
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
+        ctx.lineWidth = thickness;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#fbbf24';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        const segments = 6;
+        for (let i = 1; i < segments; i++) {
+          const px = x1 + (x2 - x1) * (i / segments) + (Math.random() - 0.5) * 80;
+          const py = y1 + (y2 - y1) * (i / segments) + (Math.random() - 0.5) * 80;
+          ctx.lineTo(px, py);
+        }
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      ctx.save();
+      ctx.translate(satan.pos.x, satan.visibleY ?? satan.pos.y);
+      const scale = 2.2;
+      ctx.scale(scale, scale);
+
+      const playerIds = Object.keys(state.players);
+      const firstAlive = playerIds.find(pid => state.players[pid]?.active && state.players[pid].hp > 0);
+      const angleToPlayer = firstAlive && state.players[firstAlive]?.pos
+        ? Math.atan2(state.players[firstAlive].pos.y - satan.pos.y, state.players[firstAlive].pos.x - satan.pos.x) + Math.PI / 2
+        : 0;
+      ctx.rotate(angleToPlayer * 0.1);
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#000';
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(-40, 60, 25, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(40, 60, 25, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.moveTo(-60, 60);
+      ctx.lineTo(-40, -10);
+      ctx.lineTo(40, -10);
+      ctx.lineTo(60, 60);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#000';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-65, 30, 130, 35, 10);
+      } else {
+        ctx.fillRect(-65, 30, 130, 35);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.ellipse(0, -20, 85, 75, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#7f1d1d';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-30 + i * 15, -40);
+        ctx.lineTo(-20 + i * 15, -10);
+        ctx.stroke();
+      }
+
+      const leftArmX = -95, leftArmY = -30;
+      const rightArmX = 95, rightArmY = -30;
+      ctx.save();
+      ctx.translate(leftArmX, leftArmY);
+      ctx.rotate(-0.5 + Math.sin(t * 2) * 0.1);
+      ctx.fillStyle = '#dc2626';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 30, 80, 12);
+      } else {
+        ctx.fillRect(0, 0, 30, 80);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(rightArmX, rightArmY);
+      ctx.rotate(0.5 - Math.sin(t * 2) * 0.1);
+      ctx.fillStyle = '#dc2626';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-30, 0, 30, 80, 12);
+      } else {
+        ctx.fillRect(-30, 0, 30, 80);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.ellipse(0, -90, 60, 55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(-35, -135);
+      ctx.lineTo(-65, -170);
+      ctx.lineTo(-15, -145);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(35, -135);
+      ctx.lineTo(65, -170);
+      ctx.lineTo(15, -145);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.ellipse(-22, -105, 18, 22, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(22, -105, 18, 22, -0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      const lookX = Math.cos(angleToPlayer - Math.PI / 2) * 6;
+      const lookY = Math.sin(angleToPlayer - Math.PI / 2) * 6;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-18 + lookX, -105 + lookY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(18 + lookX, -105 + lookY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(-15, -85);
+      ctx.lineTo(15, -85);
+      ctx.lineTo(0, -55);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+
+      // 2. Ground pieces (split earth overlay) — drawn on top so Satan rises from crack
+      if (riftOpen > 10) {
+        const jiggle = (seed: number) => Math.sin(seed * 7) * 18 + Math.sin(seed * 13) * 12;
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(satan.pos.x - riftW, satan.pos.y - riftH / 2);
+        ctx.lineTo(satan.pos.x - riftOpen, satan.pos.y - riftH / 2);
+        for (let i = 1; i <= 8; i++) {
+          const y = satan.pos.y - riftH / 2 + (riftH * i) / 8;
+          ctx.lineTo(satan.pos.x - riftOpen + jiggle(i + t), y);
+        }
+        ctx.lineTo(satan.pos.x - riftW, satan.pos.y + riftH / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(satan.pos.x + riftOpen, satan.pos.y - riftH / 2);
+        for (let i = 1; i <= 8; i++) {
+          const y = satan.pos.y - riftH / 2 + (riftH * i) / 8;
+          ctx.lineTo(satan.pos.x + riftOpen + jiggle(i + t + 5), y);
+        }
+        ctx.lineTo(satan.pos.x + riftW, satan.pos.y + riftH / 2);
+        ctx.lineTo(satan.pos.x + riftW, satan.pos.y - riftH / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Lightning to target (from visible position)
+      const satanDrawY = satan.visibleY ?? satan.pos.y;
+      if (satan.lightningTarget) {
+        drawSatanBolt(satan.pos.x, satanDrawY, satan.lightningTarget.x, satan.lightningTarget.y, 10, 1);
+      }
+      // Random ambient lightning from rift
+      if (Math.random() > 0.85) {
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const startX = satan.pos.x + side * 200;
+        const startY = satanDrawY + (Math.random() - 0.5) * 150;
+        drawSatanBolt(startX, startY, startX + (Math.random() - 0.5) * 300, startY + 200, 6 + Math.random() * 4, 0.8);
+      }
+    }
+
+    const drawBurningGrenade = (c: CanvasRenderingContext2D, scale: number, isItem: boolean, t: number) => {
+      c.save();
+      c.scale(scale, scale);
+      if (isItem) {
+        const glowSize = 30 + Math.sin(t * 5) * 10;
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(234, 88, 12, 0.4)');
+        gradient.addColorStop(1, 'rgba(234, 88, 12, 0)');
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.lineWidth = 2.5;
+      c.strokeStyle = '#000';
+      c.fillStyle = '#166534';
+      c.beginPath();
+      c.ellipse(0, 0, 15, 20, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#475569';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-5, -25, 10, 8, 2);
+      } else {
+        c.rect(-5, -25, 10, 8);
+      }
+      c.fill();
+      c.stroke();
+      c.restore();
+    };
+
+    const burningGrenades = state.burningGrenades || [];
+    burningGrenades.forEach((g: BurningGrenade) => {
+      if (!g.active) return;
+      const p = g.progress;
+      const curX = g.startPos.x + (g.targetPos.x - g.startPos.x) * p;
+      const curY = g.startPos.y + (g.targetPos.y - g.startPos.y) * p - Math.sin(p * Math.PI) * g.arcHeight;
+      ctx.save();
+      ctx.translate(curX, curY);
+      drawBurningGrenade(ctx, 0.8, false, timeRef.current);
+      ctx.restore();
+    });
+
+    const fireZones = state.fireZones || [];
+    fireZones.forEach((fz: FireZone) => {
+      if (!fz.active) return;
+      ctx.save();
+      const t = timeRef.current;
+      const flicker = 0.85 + Math.sin(t * 12) * 0.15;
+      ctx.globalCompositeOperation = 'lighter';
+      const g1 = ctx.createRadialGradient(fz.pos.x, fz.pos.y, 0, fz.pos.x, fz.pos.y, fz.radius * 0.5);
+      g1.addColorStop(0, `rgba(255, 255, 200, ${0.95 * flicker})`);
+      g1.addColorStop(0.3, `rgba(255, 180, 50, ${0.85 * flicker})`);
+      g1.addColorStop(0.6, 'rgba(255, 80, 20, 0.8)');
+      g1.addColorStop(1, 'rgba(200, 30, 0, 0.5)');
+      ctx.fillStyle = g1;
+      ctx.beginPath();
+      ctx.arc(fz.pos.x, fz.pos.y, fz.radius, 0, Math.PI * 2);
+      ctx.fill();
+      const g2 = ctx.createRadialGradient(fz.pos.x, fz.pos.y, 0, fz.pos.x, fz.pos.y, fz.radius);
+      g2.addColorStop(0, 'rgba(255, 200, 100, 0.9)');
+      g2.addColorStop(0.4, 'rgba(255, 100, 30, 0.7)');
+      g2.addColorStop(0.8, 'rgba(220, 50, 10, 0.4)');
+      g2.addColorStop(1, 'rgba(180, 20, 0, 0.15)');
+      ctx.fillStyle = g2;
+      ctx.beginPath();
+      ctx.arc(fz.pos.x, fz.pos.y, fz.radius, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2 + t * 2;
+        const dist = fz.radius * (0.6 + Math.sin(t * 8 + i) * 0.2);
+        const px = fz.pos.x + Math.cos(angle) * dist;
+        const py = fz.pos.y + Math.sin(angle) * dist;
+        const size = 25 + Math.sin(t * 10 + i * 2) * 10;
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, size);
+        grad.addColorStop(0, `rgba(255, 255, 150, ${0.9 * flicker})`);
+        grad.addColorStop(0.5, 'rgba(255, 120, 30, 0.7)');
+        grad.addColorStop(1, 'rgba(255, 50, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(px, py, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(255, 150, 50, 0.8)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ff6600';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(fz.pos.x, fz.pos.y, fz.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    });
+
+    // Draw Electric Panel — zone, glow, heal (charger), shock (random lightning)
+    const electricPanel = (state as any).electricPanel as ElectricPanel | undefined;
+    if (electricPanel) {
+      const ep = electricPanel;
+      const t = timeRef.current;
+
+      // Zone outline (dashed) — danger zone
+      ctx.strokeStyle = 'rgba(96, 165, 250, 0.35)';
+      ctx.setLineDash([10, 10]);
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(ep.pos.x, ep.pos.y, ep.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Shock: random lightning inside zone (danger zone visual)
+      const drawLightning = (x1: number, y1: number, x2: number, y2: number, intensity = 1) => {
+        ctx.strokeStyle = '#93c5fd';
+        ctx.lineWidth = 2 * intensity;
+        ctx.shadowBlur = 8 * intensity;
+        ctx.shadowColor = '#60a5fa';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        const segs = 5;
+        let lx = x1, ly = y1;
+        for (let i = 1; i < segs; i++) {
+          const tt = i / segs;
+          const nx = x1 + (x2 - x1) * tt + (Math.random() - 0.5) * 25;
+          const ny = y1 + (y2 - y1) * tt + (Math.random() - 0.5) * 25;
+          ctx.lineTo(nx, ny);
+          lx = nx;
+          ly = ny;
+        }
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      };
+      if (Math.random() > 0.85) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 20 + Math.random() * (ep.radius - 30);
+        const tx = ep.pos.x + Math.cos(angle) * dist;
+        const ty = ep.pos.y + Math.sin(angle) * dist;
+        drawLightning(ep.pos.x, ep.pos.y, tx, ty, 0.8);
+      }
+      if (Math.random() > 0.9) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30 + Math.random() * (ep.radius - 40);
+        const tx = ep.pos.x + Math.cos(angle) * dist;
+        const ty = ep.pos.y + Math.sin(angle) * dist;
+        drawLightning(ep.pos.x, ep.pos.y, tx, ty, 0.6);
+      }
+      ctx.shadowBlur = 0;
+
+      // Glow behind panel
+      const glowSize = 80 + Math.sin(t * 4) * 15;
+      const gradient = ctx.createRadialGradient(ep.pos.x, ep.pos.y, 0, ep.pos.x, ep.pos.y, glowSize);
+      gradient.addColorStop(0, 'rgba(96, 165, 250, 0.25)');
+      gradient.addColorStop(0.4, 'rgba(96, 165, 250, 0.08)');
+      gradient.addColorStop(1, 'rgba(96, 165, 250, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(ep.pos.x, ep.pos.y, glowSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      ctx.translate(ep.pos.x, ep.pos.y);
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#000';
+      ctx.fillStyle = '#475569';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-30, -40, 60, 80, 5);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-30, -40, 60, 80);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(0, -20);
+      ctx.lineTo(-10, 5);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(-5, 25);
+      ctx.lineTo(15, -5);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.arc(-15, 30, 5, 0, Math.PI * 2);
+      ctx.arc(15, 30, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Lightning sparks on panel (random)
+      if (Math.random() > 0.7) {
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#93c5fd';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        let lx = 0, ly = 0;
+        for (let i = 0; i < 5; i++) {
+          const nx = lx + (Math.random() - 0.5) * 40;
+          const ny = ly + (Math.random() - 0.5) * 40;
+          ctx.lineTo(nx, ny);
+          lx = nx;
+          ly = ny;
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.restore();
+
+      // Heal: lightning to charger (player in zone)
+      const chargerId = (state as any).electricChargerId as string | null | undefined;
+      if (chargerId) {
+        const charger = state.players[chargerId];
+        if (charger?.active && charger.pos) {
+          ctx.strokeStyle = '#93c5fd';
+          ctx.lineWidth = 3;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#60a5fa';
+          ctx.beginPath();
+          ctx.moveTo(ep.pos.x, ep.pos.y);
+          const segs = 6;
+          for (let i = 1; i < segs; i++) {
+            const tt = i / segs;
+            const nx = ep.pos.x + (charger.pos.x - ep.pos.x) * tt + (Math.random() - 0.5) * 30;
+            const ny = ep.pos.y + (charger.pos.y - ep.pos.y) * tt + (Math.random() - 0.5) * 30;
+            ctx.lineTo(nx, ny);
+          }
+          ctx.lineTo(charger.pos.x, charger.pos.y);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+    }
+
+    // Draw CTF flags and bases
+    const gameMode = (state as any).gameMode as 'deathmatch' | 'ctf' | undefined;
+    const flags = (state as any).flags as Flag[] | undefined;
+    if (gameMode === 'ctf' && flags?.length >= 2) {
+      const teamColors = ['#3b82f6', '#ef4444'];
+      flags.forEach((f: Flag) => {
+        const basePos = f.basePos;
+        ctx.save();
+        ctx.translate(basePos.x, basePos.y);
+        ctx.strokeStyle = `rgba(${f.teamId === 0 ? '59,130,246' : '239,68,68'}, 0.3)`;
+        ctx.setLineDash([10, 10]);
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, CTF_BASE_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(f.pos.x, f.pos.y);
+        const bobY = f.carriedBy ? 0 : Math.sin(timeRef.current * 4) * 5;
+        ctx.translate(0, bobY);
+        ctx.fillStyle = teamColors[f.teamId];
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -35);
+        ctx.lineTo(12, 25);
+        ctx.lineTo(6, 15);
+        ctx.lineTo(0, 25);
+        ctx.lineTo(-6, 15);
+        ctx.lineTo(-12, 25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
     // Draw Health Pickups - ENHANCED with floating animation and glow
     const healthPickups = state.healthPickups || [];
     const gunPickups = state.gunPickups || [];
@@ -715,94 +1380,160 @@ const GameCanvas: React.FC = () => {
       ctx.restore();
     });
 
-    // drawPistol — Kenny-style huge revolver (item on ground or in hand)
-    const drawPistol = (angle: number, scale: number, isItem: boolean, t: number, showMuzzleFlash?: boolean) => {
-      ctx.save();
-      ctx.rotate(angle);
-      ctx.scale(scale, scale);
+    const drawPistol = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number, showMuzzleFlash?: boolean) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
 
       if (isItem) {
         const glowSize = 35 + Math.sin(t * 5) * 8;
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
         gradient.addColorStop(0.5, 'rgba(234, 88, 12, 0.3)');
         gradient.addColorStop(1, 'rgba(234, 88, 12, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
-        ctx.fill();
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
       }
 
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = '#000';
-      ctx.lineJoin = 'round';
+      c.lineWidth = 3.5;
+      c.strokeStyle = '#000';
+      c.lineJoin = 'round';
 
-      // Grip
-      ctx.fillStyle = '#57534e';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-25, 0, 22, 55, [0, 0, 15, 15]);
-        ctx.fill();
+      c.fillStyle = '#57534e';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-25, 0, 22, 55, [0, 0, 15, 15]);
+        c.fill();
       } else {
-        ctx.fillRect(-25, 0, 22, 55);
+        c.fillRect(-25, 0, 22, 55);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Barrel
-      ctx.fillStyle = '#a8a29e';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-30, -25, 100, 30, 5);
-        ctx.fill();
+      c.fillStyle = '#a8a29e';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-30, -25, 100, 30, 5);
+        c.fill();
       } else {
-        ctx.fillRect(-30, -25, 100, 30);
+        c.fillRect(-30, -25, 100, 30);
       }
-      ctx.stroke();
+      c.stroke();
 
-      ctx.fillStyle = '#78716c';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-5, -28, 45, 36, 8);
-        ctx.fill();
+      c.fillStyle = '#78716c';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-5, -28, 45, 36, 8);
+        c.fill();
       } else {
-        ctx.fillRect(-5, -28, 45, 36);
+        c.fillRect(-5, -28, 45, 36);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Cylinder (6 chambers)
-      ctx.fillStyle = '#44403c';
+      c.fillStyle = '#44403c';
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(17 + Math.cos(a) * 10, -10 + Math.sin(a) * 10, 3, 0, Math.PI * 2);
-        ctx.fill();
+        c.beginPath();
+        c.arc(17 + Math.cos(a) * 10, -10 + Math.sin(a) * 10, 3, 0, Math.PI * 2);
+        c.fill();
       }
 
-      // Sight
-      ctx.fillStyle = '#d6d3d1';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(40, -22, 100, 18, 2);
-        ctx.fill();
+      c.fillStyle = '#d6d3d1';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(40, -22, 100, 18, 2);
+        c.fill();
       } else {
-        ctx.fillRect(40, -22, 100, 18);
+        c.fillRect(40, -22, 100, 18);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Muzzle
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.arc(135, -13, 6, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(135, -13, 6, 0, Math.PI * 2);
+      c.fill();
 
       if (showMuzzleFlash) {
-        ctx.fillStyle = `rgba(251, 191, 36, ${0.6 + Math.sin(t * 30) * 0.4})`;
-        ctx.beginPath();
-        ctx.arc(155, -13, 25 + Math.sin(t * 20) * 10, 0, Math.PI * 2);
-        ctx.fill();
+        c.fillStyle = `rgba(251, 191, 36, ${0.6 + Math.sin(t * 30) * 0.4})`;
+        c.beginPath();
+        c.arc(155, -13, 25 + Math.sin(t * 20) * 10, 0, Math.PI * 2);
+        c.fill();
       }
 
-      ctx.restore();
+      c.restore();
+    };
+
+    const drawMinigun = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number, showMuzzleFlash?: boolean) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
+
+      if (isItem) {
+        const glowSize = 40 + Math.sin(t * 5) * 10;
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(71, 85, 105, 0.4)');
+        gradient.addColorStop(1, 'rgba(71, 85, 105, 0)');
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+      c.fillStyle = '#334155';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-20, -15, 40, 30, 5);
+        c.fill();
+      } else {
+        c.fillRect(-20, -15, 40, 30);
+      }
+      c.stroke();
+
+      c.fillStyle = '#1e293b';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(15, -20, 10, 40, 3);
+        c.fill();
+      } else {
+        c.fillRect(15, -20, 10, 40);
+      }
+      c.stroke();
+
+      const spin = t * 25;
+      c.save();
+      c.translate(25, 0);
+      c.fillStyle = '#475569';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(0, -18, 60, 36, 2);
+        c.fill();
+      } else {
+        c.fillRect(0, -18, 60, 36);
+      }
+      c.stroke();
+
+      c.fillStyle = '#94a3b8';
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + spin;
+        const by = Math.sin(a) * 12;
+        const bh = 4;
+        c.fillRect(0, by - bh / 2, 65, bh);
+        c.strokeRect(0, by - bh / 2, 65, bh);
+      }
+      c.restore();
+
+      if (showMuzzleFlash) {
+        c.fillStyle = `rgba(251, 191, 36, ${0.6 + Math.sin(t * 30) * 0.4})`;
+        c.beginPath();
+        c.arc(90, 0, 25 + Math.sin(t * 20) * 10, 0, Math.PI * 2);
+        c.fill();
+      }
+
+      c.restore();
     };
 
     // Draw Gun Pickups — Kenny-style pistol on ground with glow
@@ -815,7 +1546,23 @@ const GameCanvas: React.FC = () => {
       ctx.translate(0, bobY);
 
       const rot = Math.sin(timeRef.current * 1.2) * 0.15;
-      drawPistol(-Math.PI / 4 + rot, 0.4, true, timeRef.current);
+      drawPistol(ctx, -Math.PI / 4 + rot, 0.4, true, timeRef.current);
+
+      ctx.restore();
+    });
+
+    // Draw Minigun Pickups
+    const minigunPickups = (state as any).minigunPickups ?? [];
+    minigunPickups.forEach((mp: MinigunPickup) => {
+      if (!mp.active) return;
+      ctx.save();
+      ctx.translate(mp.pos.x, mp.pos.y);
+
+      const bobY = Math.sin(timeRef.current * 2.5 + 2) * 4;
+      ctx.translate(0, bobY);
+
+      const rot = Math.sin(timeRef.current * 1.2) * 0.15;
+      drawMinigun(ctx, -Math.PI / 4 + rot, 0.4, true, timeRef.current);
 
       ctx.restore();
     });
@@ -844,61 +1591,172 @@ const GameCanvas: React.FC = () => {
         // Bright core
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.ellipse(5, 0, 8, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 8, 2, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.shadowBlur = 0;
         ctx.restore();
       });
     }
 
-    // drawSword — Kenny-style sword (item on ground or in hand)
-    const drawSword = (angle: number, scale: number, isItem: boolean, t: number) => {
+    const drawFlamethrower = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number, isAttacking: boolean = false) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
+
+      const isHeld = !isItem;
+
+      if (isItem) {
+        const glowSize = 45 + Math.sin(t * 5) * 10;
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.4)');
+        gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+
+      if (isItem || isHeld) {
+        c.fillStyle = '#991b1b';
+        c.beginPath();
+        if (typeof c.roundRect === 'function') c.roundRect(isHeld ? -35 : -60, isHeld ? -10 : -30, 30, 50, 8);
+        else c.rect(isHeld ? -35 : -60, isHeld ? -10 : -30, 30, 50);
+        c.fill();
+        c.stroke();
+
+        c.fillStyle = '#7f1d1d';
+        c.beginPath();
+        c.arc(isHeld ? -20 : -45, isHeld ? -10 : -30, 10, 0, Math.PI, true);
+        c.fill();
+        c.stroke();
+
+        if (isHeld) {
+          c.beginPath();
+          c.moveTo(-10, 10);
+          c.bezierCurveTo(0, 20, 20, 20, 30, 10);
+          c.lineWidth = 6;
+          c.strokeStyle = '#1e293b';
+          c.stroke();
+          c.lineWidth = 3;
+          c.strokeStyle = '#000';
+        }
+      }
+
+      c.fillStyle = '#475569';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(isHeld ? 35 : 0, isHeld ? 5 : -15, 80, 12, 2);
+      else c.rect(isHeld ? 35 : 0, isHeld ? 5 : -15, 80, 12);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#1e293b';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(isHeld ? 45 : 10, isHeld ? 15 : -5, 15, 20, 3);
+      else c.rect(isHeld ? 45 : 10, isHeld ? 15 : -5, 15, 20);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#334155';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(isHeld ? 105 : 70, isHeld ? 2 : -18, 15, 18, 3);
+      else c.rect(isHeld ? 105 : 70, isHeld ? 2 : -18, 15, 18);
+      c.fill();
+      c.stroke();
+
+      c.restore();
+    };
+
+    // Draw Flamethrower Pickups
+    const flamethrowerPickups = (state as any).flamethrowerPickups || [];
+    flamethrowerPickups.forEach((fp: any) => {
+      if (!fp.active) return;
       ctx.save();
-      ctx.rotate(angle);
-      ctx.scale(scale, scale);
+      ctx.translate(fp.pos.x, fp.pos.y);
+
+      const bobY = Math.sin(timeRef.current * 2.5 + 4) * 4;
+      ctx.translate(0, bobY);
+
+      const rot = Math.sin(timeRef.current * 1.2) * 0.2;
+      drawFlamethrower(ctx, -Math.PI / 6 + rot, 0.4, true, timeRef.current);
+
+      ctx.restore();
+    });
+
+    // Draw Flames - orange/red expanding cones
+    if ((state as any).flames) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      (state as any).flames.forEach((flame: any) => {
+        if (!flame.active) return;
+
+        const normalizedLife = Math.max(0, flame.life / (flame.maxLife || 0.5));
+
+        const alpha = normalizedLife;
+        const r = 255;
+        const g = Math.floor(180 * normalizedLife + 40);
+        const b = Math.floor(30 * normalizedLife);
+
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.beginPath();
+        // Draw directly at flame pos without translate to handle lighter blending cleanly
+        ctx.arc(flame.pos.x, flame.pos.y, flame.size || 20, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+
+    const drawSword = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
 
       if (isItem) {
         const glowSize = 40 + Math.sin(t * 5) * 10;
-        const gradient = ctx.createRadialGradient(0, -100, 0, 0, -100, glowSize * 2);
+        const gradient = c.createRadialGradient(0, -100, 0, 0, -100, glowSize * 2);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
         gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.3)');
         gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, -100, glowSize * 2, 0, Math.PI * 2);
-        ctx.fill();
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, -100, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
       }
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#000';
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
 
-      ctx.fillStyle = '#451a03';
-      ctx.fillRect(-6, -10, 12, 40);
-      ctx.strokeRect(-6, -10, 12, 40);
+      c.fillStyle = '#451a03';
+      c.fillRect(-6, -10, 12, 40);
+      c.strokeRect(-6, -10, 12, 40);
 
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(-20, -10, 40, 8);
-      ctx.strokeRect(-20, -10, 40, 8);
+      c.fillStyle = '#1e293b';
+      c.fillRect(-20, -10, 40, 8);
+      c.strokeRect(-20, -10, 40, 8);
 
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(-18, -10);
-      ctx.lineTo(18, -10);
-      ctx.lineTo(22, -220);
-      ctx.lineTo(0, -250);
-      ctx.lineTo(-22, -220);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#94a3b8';
+      c.beginPath();
+      c.moveTo(-18, -10);
+      c.lineTo(18, -10);
+      c.lineTo(22, -220);
+      c.lineTo(0, -250);
+      c.lineTo(-22, -220);
+      c.closePath();
+      c.fill();
+      c.stroke();
 
-      ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-      ctx.beginPath();
-      ctx.moveTo(0, -10);
-      ctx.lineTo(0, -240);
-      ctx.stroke();
+      c.strokeStyle = 'rgba(0,0,0,0.1)';
+      c.beginPath();
+      c.moveTo(0, -10);
+      c.lineTo(0, -240);
+      c.stroke();
 
-      ctx.restore();
+      c.restore();
     };
 
     // Draw Sword Pickups — Kenny-style sword lying on ground with glow
@@ -911,114 +1769,169 @@ const GameCanvas: React.FC = () => {
       ctx.translate(0, bobY);
 
       const rot = Math.sin(timeRef.current * 1.2) * 0.2;
-      drawSword(Math.PI / 4 + rot, 0.4, true, timeRef.current);
+      drawSword(ctx, Math.PI / 4 + rot, 0.4, true, timeRef.current);
 
       ctx.restore();
     });
 
-    // drawBomb — Kenny-style grenade (item on ground or in hand)
-    const drawBomb = (angle: number, scale: number, isItem: boolean, t: number) => {
+    const drawShuriken = (c: CanvasRenderingContext2D, rot: number, scale: number, isItem: boolean, t: number) => {
+      c.save();
+      c.rotate(rot);
+      c.scale(scale, scale);
+      if (isItem) {
+        const glowSize = 30 + Math.sin(t * 5) * 10;
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(148, 163, 184, 0.4)');
+        gradient.addColorStop(1, 'rgba(148, 163, 184, 0)');
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.lineWidth = 2.5;
+      c.strokeStyle = '#000';
+      c.fillStyle = '#94a3b8';
+      for (let i = 0; i < 4; i++) {
+        c.rotate(Math.PI / 2);
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.lineTo(-10, -25);
+        c.lineTo(0, -35);
+        c.lineTo(10, -25);
+        c.closePath();
+        c.fill();
+        c.stroke();
+      }
+      c.fillStyle = '#475569';
+      c.beginPath();
+      c.arc(0, 0, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#cbd5e1';
+      c.beginPath();
+      c.arc(0, 0, 3, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    };
+
+    const shurikenPickups = state.shurikenPickups || [];
+    shurikenPickups.forEach((sp: ShurikenPickup) => {
+      if (!sp.active) return;
       ctx.save();
-      ctx.rotate(angle);
-      ctx.scale(scale, scale);
+      ctx.translate(sp.pos.x, sp.pos.y);
+      const bobY = Math.sin(timeRef.current * 3 + 1) * 5;
+      ctx.translate(0, bobY);
+      const rot = timeRef.current * 5;
+      drawShuriken(ctx, rot, 0.5, true, timeRef.current);
+      ctx.restore();
+    });
+
+    const burningGrenadePickups = state.burningGrenadePickups || [];
+    burningGrenadePickups.forEach((bg: BurningGrenadePickup) => {
+      if (!bg.active) return;
+      ctx.save();
+      ctx.translate(bg.pos.x, bg.pos.y);
+      const bobY = Math.sin(timeRef.current * 2.5 + 2) * 5;
+      ctx.translate(0, bobY);
+      drawBurningGrenade(ctx, 1, true, timeRef.current);
+      ctx.restore();
+    });
+
+    const drawBomb = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
 
       if (isItem) {
         const glowSize = 30 + Math.sin(t * 5) * 5;
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
         gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
         gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
-        ctx.fill();
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
       }
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#000';
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
 
-      // Fuse line
-      ctx.beginPath();
-      ctx.moveTo(0, -25);
-      ctx.quadraticCurveTo(10, -40, 20, -35);
-      ctx.stroke();
+      c.beginPath();
+      c.moveTo(0, -25);
+      c.quadraticCurveTo(10, -40, 20, -35);
+      c.stroke();
 
-      // Fuse spark (flickering)
-      ctx.fillStyle = '#fbbf24';
-      ctx.beginPath();
-      ctx.arc(20, -35, 4 + Math.sin(t * 15) * 2, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = '#fbbf24';
+      c.beginPath();
+      c.arc(20, -35, 4 + Math.sin(t * 15) * 2, 0, Math.PI * 2);
+      c.fill();
 
-      // Bomb body
-      ctx.fillStyle = '#1c1917';
-      ctx.beginPath();
-      ctx.arc(0, 0, 25, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#1c1917';
+      c.beginPath();
+      c.arc(0, 0, 25, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      // Bomb neck
-      ctx.fillStyle = '#44403c';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-8, -28, 16, 8, 2);
-        ctx.fill();
+      c.fillStyle = '#44403c';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-8, -28, 16, 8, 2);
+        c.fill();
       } else {
-        ctx.fillRect(-8, -28, 16, 8);
+        c.fillRect(-8, -28, 16, 8);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.beginPath();
-      ctx.arc(-8, -8, 6, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = 'rgba(255,255,255,0.1)';
+      c.beginPath();
+      c.arc(-8, -8, 6, 0, Math.PI * 2);
+      c.fill();
 
-      ctx.restore();
+      c.restore();
     };
 
-    // drawChainsaw — Kenny-style chainsaw (item on ground or in hand)
-    const drawChainsaw = (angle: number, scale: number, isItem: boolean, t: number) => {
-      ctx.save();
-      ctx.rotate(angle);
-      ctx.scale(scale, scale);
+    const drawChainsaw = (c: CanvasRenderingContext2D, angle: number, scale: number, isItem: boolean, t: number) => {
+      c.save();
+      c.rotate(angle);
+      c.scale(scale, scale);
 
       if (isItem) {
         const glowSize = 40 + Math.sin(t * 5) * 8;
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
+        const gradient = c.createRadialGradient(0, 0, 0, 0, 0, glowSize * 2);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
         gradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.4)');
         gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
-        ctx.fill();
+        c.fillStyle = gradient;
+        c.beginPath();
+        c.arc(0, 0, glowSize * 2, 0, Math.PI * 2);
+        c.fill();
       }
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#000';
-      ctx.lineJoin = 'round';
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+      c.lineJoin = 'round';
 
-      // Red body
-      ctx.fillStyle = '#ef4444';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-40, -25, 50, 45, 8);
-        ctx.fill();
+      c.fillStyle = '#ef4444';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-40, -25, 50, 45, 8);
+        c.fill();
       } else {
-        ctx.fillRect(-40, -25, 50, 45);
+        c.fillRect(-40, -25, 50, 45);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Grip
-      ctx.fillStyle = '#1c1917';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(-45, -20, 15, 25, 4);
-        ctx.fill();
+      c.fillStyle = '#1c1917';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(-45, -20, 15, 25, 4);
+        c.fill();
       } else {
-        ctx.fillRect(-45, -20, 15, 25);
+        c.fillRect(-45, -20, 15, 25);
       }
-      ctx.stroke();
+      c.stroke();
 
       // Engine arc
       ctx.strokeStyle = '#44403c';
@@ -1030,44 +1943,41 @@ const GameCanvas: React.FC = () => {
       ctx.lineWidth = 3;
       ctx.strokeStyle = '#000';
 
-      // Bar/guide
-      ctx.fillStyle = '#94a3b8';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(10, -18, 140, 25, 4);
-        ctx.fill();
+      c.fillStyle = '#94a3b8';
+      if (typeof c.roundRect === 'function') {
+        c.beginPath();
+        c.roundRect(10, -18, 140, 25, 4);
+        c.fill();
       } else {
-        ctx.fillRect(10, -18, 140, 25);
+        c.fillRect(10, -18, 140, 25);
       }
-      ctx.stroke();
+      c.stroke();
 
-      // Chain teeth (animated)
       const chainPos = (t * 40) % 20;
-      ctx.fillStyle = '#44403c';
+      c.fillStyle = '#44403c';
       for (let i = 0; i < 140; i += 20) {
-        ctx.beginPath();
-        ctx.moveTo(10 + i + chainPos, -20);
-        ctx.lineTo(15 + i + chainPos, -24);
-        ctx.lineTo(20 + i + chainPos, -20);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(10 + i + chainPos, 8);
-        ctx.lineTo(15 + i + chainPos, 12);
-        ctx.lineTo(20 + i + chainPos, 8);
-        ctx.fill();
+        c.beginPath();
+        c.moveTo(10 + i + chainPos, -20);
+        c.lineTo(15 + i + chainPos, -24);
+        c.lineTo(20 + i + chainPos, -20);
+        c.fill();
+        c.beginPath();
+        c.moveTo(10 + i + chainPos, 8);
+        c.lineTo(15 + i + chainPos, 12);
+        c.lineTo(20 + i + chainPos, 8);
+        c.fill();
       }
 
-      // Engine circle
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.arc(-15, -5, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#1e293b';
+      c.beginPath();
+      c.arc(-15, -5, 10, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      ctx.restore();
+      c.restore();
     };
 
-    // Draw Chainsaw Pickups — Kenny-style on ground with glow
+    // Draw Chainsaw Pickups
     const chainsawPickups = (state as any).chainsawPickups || [];
     chainsawPickups.forEach((cp: any) => {
       if (!cp.active) return;
@@ -1078,7 +1988,7 @@ const GameCanvas: React.FC = () => {
       ctx.translate(0, bobY);
 
       const rot = Math.sin(timeRef.current * 1.2) * 0.2;
-      drawChainsaw(-Math.PI / 6 + rot, 0.4, true, timeRef.current);
+      drawChainsaw(ctx, -Math.PI / 6 + rot, 0.4, true, timeRef.current);
 
       ctx.restore();
     });
@@ -1093,7 +2003,7 @@ const GameCanvas: React.FC = () => {
       const bobY = Math.sin(timeRef.current * 2.2 + 3) * 4;
       ctx.translate(0, bobY);
 
-      drawBomb(0, 1, true, timeRef.current);
+      drawBomb(ctx, 0, 1, true, timeRef.current);
 
       ctx.restore();
     });
@@ -1107,13 +2017,191 @@ const GameCanvas: React.FC = () => {
 
       const velAngle = Math.atan2(sword.vel.y, sword.vel.x);
       const spin = timeRef.current * 15;
-      drawSword(velAngle + Math.PI / 2 + spin, 1, false, timeRef.current);
+      drawSword(ctx, velAngle + Math.PI / 2 + spin, 1, false, timeRef.current);
 
       ctx.restore();
     });
 
-    // Draw Players — Kenny the Rogue
-    const drawKenny = (p: any, t: number, isMe: boolean) => {
+    const shurikenProjectiles = state.shurikenProjectiles || [];
+    shurikenProjectiles.forEach((s: ShurikenProjectile) => {
+      if (!s.active) return;
+      ctx.save();
+      ctx.translate(s.pos.x, s.pos.y);
+      drawShuriken(ctx, s.rot, 0.6, false, timeRef.current);
+      ctx.restore();
+    });
+
+    const drawCartman = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
+
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+
+      // Feet (black)
+      c.fillStyle = '#000000';
+      c.beginPath();
+      c.ellipse(-20, 42, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.ellipse(20, 42, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+
+      // Pants (Brown)
+      c.fillStyle = '#653E23';
+      c.beginPath();
+      c.ellipse(0, 32, 40, 15, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Body/Jacket (Red)
+      c.fillStyle = '#E51219';
+      c.beginPath();
+      c.ellipse(0, 5, 48, 40, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Jacket middle line & buttons
+      c.beginPath();
+      c.moveTo(0, -32);
+      c.lineTo(0, 44);
+      c.stroke();
+
+      c.fillStyle = '#000';
+      c.beginPath(); c.arc(0, -10, 2, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(0, 5, 2, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(0, 20, 2, 0, Math.PI * 2); c.fill();
+
+      // Hands/Mittens (Yellow)
+      c.fillStyle = '#FCE301';
+      c.beginPath();
+      c.arc(-42, 15, 12, 0, Math.PI * 2); // Left
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.arc(42, 15, 12, 0, Math.PI * 2); // Right
+      c.fill();
+      c.stroke();
+
+      // Head (Flesh tone)
+      c.fillStyle = '#FFE2B8';
+      c.beginPath();
+      // Double chin / wide oval
+      c.ellipse(0, -40, 45, 38, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Hat (Cyan with Yellow pompom and brim)
+      c.fillStyle = '#20C1D0'; // Cyan base
+      c.beginPath();
+      c.arc(0, -40, 45, Math.PI, Math.PI * 2);
+      c.lineTo(45, -40);
+      c.ellipse(0, -78, 43, 8, 0, 0, Math.PI, true); // Curve the top
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // Hat yellow brim
+      c.fillStyle = '#FCE301'; // Yellow
+      c.beginPath();
+      c.moveTo(-45, -40);
+      c.quadraticCurveTo(0, -55, 45, -40);
+      c.lineTo(45, -34);
+      c.quadraticCurveTo(0, -49, -45, -34);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // Eyes (White with small black dots)
+      c.fillStyle = '#FFFFFF';
+      c.beginPath();
+      // Slightly angled eyes
+      c.ellipse(-12, -45, 14, 18, Math.PI * 0.1, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(12, -45, 14, 18, -Math.PI * 0.1, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Pupils (Looking towards center)
+      c.fillStyle = '#000000';
+      c.beginPath();
+      c.arc(-6, -45, 2.5, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.arc(6, -45, 2.5, 0, Math.PI * 2);
+      c.fill();
+
+      // Hat Pom-pom
+      c.beginPath();
+      c.arc(0, -84, 12, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Mouth (Small annoyed line/frown)
+      c.strokeStyle = '#000';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(-6, -20);
+      c.lineTo(6, -20);
+      c.stroke();
+
+      // Double chin line
+      c.beginPath();
+      c.moveTo(-15, -12);
+      c.quadraticCurveTo(0, -4, 15, -12);
+      c.stroke();
+
+      c.save();
+      c.translate(45, -5);
+      c.rotate(swing);
+
+      const hasGun = (p as any).hasGun;
+      const hasMinigun = (p as any).hasMinigun;
+      const hasFlamethrower = (p as any).hasFlamethrower;
+      const hasSword = (p as any).hasSword;
+      const hasChainsaw = (p as any).hasChainsaw;
+      const hasBomb = (p as any).hasBomb;
+
+      if (hasMinigun) {
+        const minigunAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawMinigun(c, minigunAngle, 1, false, t, p.isAttacking);
+      } else if (hasFlamethrower) {
+        const flamethrowerAngle = -Math.PI / 2 + (p.isAttacking ? -0.1 : 0);
+        drawFlamethrower(c, flamethrowerAngle, 1, false, t, p.isAttacking);
+      } else if (hasGun) {
+        const pistolAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawPistol(c, pistolAngle, 0.6, false, t, p.isAttacking);
+      } else if (hasBomb) {
+        const bombScale = p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8;
+        drawBomb(c, 0, bombScale, false, t);
+      } else if (hasChainsaw) {
+        const chainsawAngle = -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0);
+        drawChainsaw(c, chainsawAngle, 0.6, false, t);
+      } else if (hasSword) {
+        drawSword(c, swing, 1, false, t);
+        if (p.isAttacking) {
+          c.strokeStyle = 'rgba(255,255,255,0.4)';
+          c.lineWidth = 50;
+          c.lineCap = 'round';
+          c.beginPath();
+          c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2);
+          c.stroke();
+          c.lineWidth = 3;
+        }
+      }
+      c.restore();
+    };
+
+    const drawKenny = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
       const r = p.radius;
       const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
       const isMoving = velMag > 5;
@@ -1125,134 +2213,501 @@ const GameCanvas: React.FC = () => {
       const bodyColor = isMe ? '#ea580c' : '#c2410c';
       const faceColor = isMe ? '#7c2d12' : '#5c1d0c';
 
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.beginPath();
-      ctx.ellipse(0, 10, 30, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = 'rgba(0,0,0,0.2)';
+      c.beginPath();
+      c.ellipse(0, 10, 30, 10, 0, 0, Math.PI * 2);
+      c.fill();
 
-      ctx.translate(0, -hop);
-      ctx.rotate(sideTilt);
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#000';
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
 
-      // Boots
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.ellipse(-15, 15, 12, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(15, 15, 12, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#78350f';
+      c.beginPath();
+      c.ellipse(-15, 15, 12, 7, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(15, 15, 12, 7, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      // Body
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(-24, -20, 48, 40, [18, 18, 5, 5]);
+      c.fillStyle = bodyColor;
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-24, -20, 48, 40, [18, 18, 5, 5]);
       } else {
-        ctx.rect(-24, -20, 48, 40);
+        c.rect(-24, -20, 48, 40);
       }
-      ctx.fill();
-      ctx.stroke();
+      c.fill();
+      c.stroke();
 
-      // Head outline
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.arc(0, -35, 34, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#78350f';
+      c.beginPath();
+      c.arc(0, -35, 34, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      // Face
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      ctx.arc(0, -35, 30, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = bodyColor;
+      c.beginPath();
+      c.arc(0, -35, 30, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      ctx.fillStyle = faceColor;
-      ctx.beginPath();
-      ctx.ellipse(0, -35, 22, 25, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = faceColor;
+      c.beginPath();
+      c.ellipse(0, -35, 22, 25, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      ctx.fillStyle = '#fecaca';
-      ctx.beginPath();
-      ctx.ellipse(0, -35, 18, 20, 0, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = '#fecaca';
+      c.beginPath();
+      c.ellipse(0, -35, 18, 20, 0, 0, Math.PI * 2);
+      c.fill();
 
-      // Eyes
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.ellipse(-7, -38, 9, 11, 0.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(7, -38, 9, 11, -0.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.ellipse(-7, -38, 9, 11, 0.1, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(7, -38, 9, 11, -0.1, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.arc(-5, -38, 2, 0, Math.PI * 2);
-      ctx.arc(5, -38, 2, 0, Math.PI * 2);
-      ctx.fill();
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(-5, -38, 2, 0, Math.PI * 2);
+      c.arc(5, -38, 2, 0, Math.PI * 2);
+      c.fill();
 
-      // Left arm (hand)
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.arc(-34, -5, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#78350f';
+      c.beginPath();
+      c.arc(-34, -5, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
-      // Right arm with weapon
-      ctx.save();
-      ctx.translate(34, -5);
-      ctx.rotate(swing);
+      c.save();
+      c.translate(34, -5);
+      c.rotate(swing);
 
-      ctx.fillStyle = '#78350f';
-      ctx.beginPath();
-      ctx.arc(0, 0, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      c.fillStyle = '#78350f';
+      c.beginPath();
+      c.arc(0, 0, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
 
       const hasGun = (p as any).hasGun;
+      const hasMinigun = (p as any).hasMinigun;
+      const hasFlamethrower = (p as any).hasFlamethrower;
       const hasSword = (p as any).hasSword;
       const hasChainsaw = (p as any).hasChainsaw;
       const hasBomb = (p as any).hasBomb;
 
-      if (hasGun) {
+      if (hasMinigun) {
+        const minigunAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawMinigun(c, minigunAngle, 1, false, t, p.isAttacking);
+      } else if (hasFlamethrower) {
+        const flamethrowerAngle = -Math.PI / 2 + (p.isAttacking ? -0.1 : 0);
+        drawFlamethrower(c, flamethrowerAngle, 1, false, t, p.isAttacking);
+      } else if (hasGun) {
         const pistolAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
-        drawPistol(pistolAngle, 0.6, false, t, p.isAttacking);
+        drawPistol(c, pistolAngle, 0.6, false, t, p.isAttacking);
       } else if (hasBomb) {
         const bombScale = p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8;
-        drawBomb(0, bombScale, false, t);
+        drawBomb(c, 0, bombScale, false, t);
       } else if (hasChainsaw) {
         const chainsawAngle = -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0);
-        drawChainsaw(chainsawAngle, 0.6, false, t);
+        drawChainsaw(c, chainsawAngle, 0.6, false, t);
       } else if (hasSword) {
-        drawSword(swing, 1, false, t);
+        drawSword(c, swing, 1, false, t);
         if (p.isAttacking) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-          ctx.lineWidth = 50;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2);
-          ctx.stroke();
-          ctx.lineWidth = 3;
+          c.strokeStyle = 'rgba(255,255,255,0.4)';
+          c.lineWidth = 50;
+          c.lineCap = 'round';
+          c.beginPath();
+          c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2);
+          c.stroke();
+          c.lineWidth = 3;
         }
       } else {
-        // Unarmed — empty hand
-        ctx.fillStyle = '#78350f';
-        ctx.beginPath();
-        ctx.arc(0, 0, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        c.fillStyle = '#78350f';
+        c.beginPath();
+        c.arc(0, 0, 9, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
       }
 
-      ctx.restore();
+      c.restore();
+    };
+
+    const drawKyle = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.ellipse(-15, 20, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(15, 20, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#f97316';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-22, -15, 44, 40, [15, 15, 5, 5]);
+      else c.rect(-22, -15, 44, 40);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#22c55e';
+      c.beginPath();
+      c.arc(-26, 0, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.arc(26, 0, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#22c55e';
+      c.beginPath();
+      c.arc(0, -35, 34, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-38, -45, 15, 45, 5);
+      else c.rect(-38, -45, 15, 45);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(23, -45, 15, 45, 5);
+      else c.rect(23, -45, 15, 45);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#FEE1C8';
+      c.beginPath();
+      c.arc(0, -30, 30, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.ellipse(-10, -38, 11, 13, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(10, -38, 11, 13, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(-8, -38, 2, 0, Math.PI * 2);
+      c.arc(8, -38, 2, 0, Math.PI * 2);
+      c.fill();
+      c.save();
+      c.translate(34, -5);
+      c.rotate(swing);
+      const hasGun = (p as any).hasGun, hasMinigun = (p as any).hasMinigun, hasFlamethrower = (p as any).hasFlamethrower, hasSword = (p as any).hasSword, hasChainsaw = (p as any).hasChainsaw, hasBomb = (p as any).hasBomb, hasShurikens = (p as any).hasShurikens, hasBurningGrenade = (p as any).hasBurningGrenade;
+      if (hasMinigun) drawMinigun(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 1, false, t, p.isAttacking);
+      else if (hasFlamethrower) drawFlamethrower(c, -Math.PI / 2 + (p.isAttacking ? -0.1 : 0), 1, false, t, p.isAttacking);
+      else if (hasGun) drawPistol(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 0.6, false, t, p.isAttacking);
+      else if (hasBomb) drawBomb(c, 0, p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8, false, t);
+      else if (hasBurningGrenade) drawBurningGrenade(c, 0.7, false, t);
+      else if (hasChainsaw) drawChainsaw(c, -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0), 0.6, false, t);
+      else if (hasSword) { drawSword(c, swing, 1, false, t); if (p.isAttacking) { c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 50; c.lineCap = 'round'; c.beginPath(); c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); c.stroke(); c.lineWidth = 3; } }
+      else if (hasShurikens) drawShuriken(c, (p.angle ?? 0) + t * 5, 0.4, false, t);
+      else { c.fillStyle = '#78350f'; c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      c.restore();
+    };
+
+    const drawStanNinja = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.ellipse(-15, 20, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(15, 20, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#1e3a8a';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-22, -15, 44, 40, [15, 15, 5, 5]);
+      else c.rect(-22, -15, 44, 40);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#1e3a8a';
+      c.beginPath();
+      c.arc(-26, 0, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.arc(26, 0, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#1e40af';
+      c.beginPath();
+      c.arc(0, -35, 34, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#000';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-25, -45, 50, 20, 2);
+      else c.rect(-25, -45, 50, 20);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#FEE1C8';
+      c.beginPath();
+      c.ellipse(0, -35, 20, 10, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#fff';
+      c.beginPath();
+      c.ellipse(-8, -35, 10, 8, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(8, -35, 10, 8, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(-6, -35, 2, 0, Math.PI * 2);
+      c.arc(6, -35, 2, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#ef4444';
+      c.beginPath();
+      c.arc(0, -68, 8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.save();
+      c.translate(34, -5);
+      c.rotate(swing);
+      const hasGun = (p as any).hasGun, hasMinigun = (p as any).hasMinigun, hasFlamethrower = (p as any).hasFlamethrower, hasSword = (p as any).hasSword, hasChainsaw = (p as any).hasChainsaw, hasBomb = (p as any).hasBomb, hasShurikens = (p as any).hasShurikens, hasBurningGrenade = (p as any).hasBurningGrenade;
+      if (hasMinigun) drawMinigun(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 1, false, t, p.isAttacking);
+      else if (hasFlamethrower) drawFlamethrower(c, -Math.PI / 2 + (p.isAttacking ? -0.1 : 0), 1, false, t, p.isAttacking);
+      else if (hasGun) drawPistol(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 0.6, false, t, p.isAttacking);
+      else if (hasBomb) drawBomb(c, 0, p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8, false, t);
+      else if (hasBurningGrenade) drawBurningGrenade(c, 0.7, false, t);
+      else if (hasChainsaw) drawChainsaw(c, -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0), 0.6, false, t);
+      else if (hasSword) { drawSword(c, swing, 1, false, t); if (p.isAttacking) { c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 50; c.lineCap = 'round'; c.beginPath(); c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); c.stroke(); c.lineWidth = 3; } }
+      else if (hasShurikens) drawShuriken(c, (p.angle ?? 0) + t * 5, 0.4, false, t);
+      else { c.fillStyle = '#78350f'; c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      c.restore();
+    };
+
+    const drawSnoopDogg = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
+      c.lineWidth = 3;
+      c.strokeStyle = '#000';
+
+      // Feet/Shoes (White/Blue sneakers)
+      c.fillStyle = '#FFFFFF';
+      c.beginPath();
+      c.ellipse(-14, 42, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(14, 42, 12, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#1d4ed8'; // Blue shoe detail
+      c.beginPath(); c.ellipse(-14, 42, 6, 3, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(14, 42, 6, 3, 0, 0, Math.PI * 2); c.fill();
+
+      // Pants (Baggy Denim Blue)
+      c.fillStyle = '#4B5563';
+      c.beginPath();
+      c.ellipse(0, 25, 20, 22, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Pants line
+      c.beginPath();
+      c.moveTo(0, 15);
+      c.lineTo(0, 45);
+      c.stroke();
+
+      // Body/Hoodie (Blue with white strings)
+      c.fillStyle = '#1d4ed8'; // Royal Blue Hoodie
+      c.beginPath();
+      c.ellipse(0, -5, 24, 30, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Hoodie pocket
+      c.beginPath();
+      c.moveTo(-12, 10);
+      c.lineTo(12, 10);
+      c.lineTo(18, 20);
+      c.lineTo(-18, 20);
+      c.closePath();
+      c.stroke();
+
+      // Draw Gold Chain
+      c.strokeStyle = '#FDE047'; // Gold
+      c.lineWidth = 2.5;
+      c.beginPath();
+      c.moveTo(-10, -25);
+      c.quadraticCurveTo(0, -5, 10, -25);
+      c.stroke();
+      // Chain Medallion
+      c.fillStyle = '#EAB308';
+      c.beginPath();
+      c.arc(0, -7, 6, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#000';
+      c.lineWidth = 1;
+      c.stroke();
+
+      // reset stroke
+      c.lineWidth = 3;
+
+      // Hands (Brown skin tone)
+      c.fillStyle = '#6B4226';
+      c.beginPath();
+      c.arc(-26, 8, 10, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.arc(26, 8, 10, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Head Base (Brown Skin) - Taller and narrower than Cartman/Stan
+      c.fillStyle = '#6B4226';
+      c.beginPath();
+      c.ellipse(0, -42, 28, 30, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Hair/Dreadlocks (Black hanging down with braided texture)
+      c.fillStyle = '#0a0a0a';
+      c.strokeStyle = '#000';
+      const drawBraid = (x: number, y: number, segments: number, angle: number) => {
+        c.save();
+        c.translate(x, y);
+        c.rotate(angle);
+        c.lineWidth = 1.5;
+        // Draw overlapping ellipses to simulate a braid
+        for (let j = 0; j < segments; j++) {
+          c.beginPath();
+          c.ellipse(0, j * 5, 5 - (j * 0.15), 4, 0, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+        }
+        c.restore();
+      };
+
+      // Left side locs
+      drawBraid(-27, -42, 7, 0.3);
+      drawBraid(-23, -32, 6, 0.1);
+      drawBraid(-18, -22, 5, -0.1);
+      // Right side locs
+      drawBraid(27, -42, 7, -0.3);
+      drawBraid(23, -32, 6, -0.1);
+      drawBraid(18, -22, 5, 0.1);
+
+      c.lineWidth = 3;
+
+      // Top braided hair
+      c.beginPath();
+      c.arc(0, -68, 22, Math.PI, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Hairtie/Bandana (Blue)
+      c.fillStyle = '#1d4ed8';
+      c.beginPath();
+      c.ellipse(0, -66, 22, 5, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // Goatee/Facial Hair
+      c.fillStyle = '#0a0a0a';
+      c.beginPath();
+      c.ellipse(0, -22, 8, 8, 0, 0, Math.PI, false); // Bottom curve
+      c.lineTo(-8, -25);
+      c.lineTo(8, -25);
+      c.closePath();
+      c.fill();
+      c.stroke();
+
+      // Mouth (Relaxed smirk)
+      c.strokeStyle = '#000';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(-5, -24);
+      c.lineTo(5, -24);
+      c.stroke();
+
+      // Sunglasses (Classic rectangular black shades)
+      c.fillStyle = '#0a0a0a';
+      c.lineWidth = 2;
+      c.beginPath();
+      // Left lens
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(-22, -50, 20, 12, 2);
+        // Right lens
+        c.roundRect(2, -50, 20, 12, 2);
+      } else {
+        c.rect(-22, -50, 20, 12);
+        c.rect(2, -50, 20, 12);
+      }
+      c.fill();
+      c.stroke();
+      // Bridge
+      c.beginPath();
+      c.moveTo(-2, -45);
+      c.lineTo(2, -45);
+      c.stroke();
+
+      // Smoke trail from mouth (Joint effect)
+      c.strokeStyle = `rgba(200, 200, 200, ${0.4 + Math.sin(t * 3) * 0.2})`;
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(-6, -24);
+      c.quadraticCurveTo(-15, -30 + Math.sin(t * 5) * 2, -20, -50 + Math.cos(t * 4) * 5);
+      c.stroke();
+      c.save();
+      c.translate(34, -5);
+      c.rotate(swing);
+      const hasGun = (p as any).hasGun, hasMinigun = (p as any).hasMinigun, hasFlamethrower = (p as any).hasFlamethrower, hasSword = (p as any).hasSword, hasChainsaw = (p as any).hasChainsaw, hasBomb = (p as any).hasBomb, hasShurikens = (p as any).hasShurikens, hasBurningGrenade = (p as any).hasBurningGrenade;
+      if (hasMinigun) drawMinigun(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 1, false, t, p.isAttacking);
+      else if (hasFlamethrower) drawFlamethrower(c, -Math.PI / 2 + (p.isAttacking ? -0.1 : 0), 1, false, t, p.isAttacking);
+      else if (hasGun) drawPistol(c, -Math.PI / 2 + (p.isAttacking ? -0.3 : 0), 0.6, false, t, p.isAttacking);
+      else if (hasBomb) drawBomb(c, 0, p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8, false, t);
+      else if (hasBurningGrenade) drawBurningGrenade(c, 0.7, false, t);
+      else if (hasChainsaw) drawChainsaw(c, -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0), 0.6, false, t);
+      else if (hasSword) { drawSword(c, swing, 1, false, t); if (p.isAttacking) { c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 50; c.lineCap = 'round'; c.beginPath(); c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); c.stroke(); c.lineWidth = 3; } }
+      else if (hasShurikens) drawShuriken(c, (p.angle ?? 0) + t * 5, 0.4, false, t);
+      else { c.fillStyle = '#78350f'; c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      c.restore();
     };
 
     Object.values(state.players).forEach(p => {
@@ -1260,13 +2715,36 @@ const GameCanvas: React.FC = () => {
       const isMe = p.playerId === playerIdRef.current;
       const r = p.radius;
 
-      const primary = isMe ? '#00e5ff' : '#ff003c';
+      const gameModePlayer = (state as any).gameMode as 'deathmatch' | 'ctf' | undefined;
+      const teamIdPlayer = (p as any).teamId as 0 | 1 | undefined;
+      const teamColors = ['#3b82f6', '#ef4444'];
+      const primary = gameModePlayer === 'ctf' && teamIdPlayer !== undefined
+        ? teamColors[teamIdPlayer]
+        : isMe ? '#00e5ff' : '#ff003c';
 
       ctx.save();
+
+      // Handle elevation rendering (make player look higher)
+      const isElevated = p.elevation === 1;
+      const elevationScale = isElevated ? 1.2 : 1.0;
+      const shadowOffset = isElevated ? 40 : 0;
+
+      // Draw massive drop shadow if elevated
+      if (isElevated) {
+        ctx.save();
+        ctx.translate(p.pos.x, p.pos.y + shadowOffset);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 1.5, r * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate((p.angle ?? 0) + Math.PI / 2);
-      ctx.scale(r / 35, r / 35);
-      drawKenny(p, timeRef.current, isMe);
+      ctx.scale(r / 35 * elevationScale, r / 35 * elevationScale);
+      const heroDraw = p.heroType === 'cartman' ? drawCartman : p.heroType === 'kyle' ? drawKyle : p.heroType === 'stanNinja' ? drawStanNinja : p.heroType === 'snoopDogg' ? drawSnoopDogg : drawKenny;
+      heroDraw(ctx, p, timeRef.current, isMe);
       ctx.restore();
 
       // === UI ELEMENTS (world space, not rotated) ===
@@ -1290,9 +2768,10 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(p.pos.x - hpBarWidth / 2 - 1, hpBarY - 1, hpBarWidth + 2, hpBarHeight + 2);
 
-      // HP bar fill
-      const hpColor = hpPercent > 0.5 ? '#39ff14' : hpPercent > 0.25 ? '#ffd700' : '#ff1744';
-      const hpGlow = hpPercent > 0.5 ? 'rgba(57,255,20,0.4)' : hpPercent > 0.25 ? 'rgba(255,215,0,0.4)' : 'rgba(255,23,68,0.4)';
+      // HP bar fill (blue when charging at electric panel)
+      const isCharging = (state as any).electricChargerId === p.playerId;
+      const hpColor = isCharging ? '#60a5fa' : hpPercent > 0.5 ? '#39ff14' : hpPercent > 0.25 ? '#ffd700' : '#ff1744';
+      const hpGlow = isCharging ? 'rgba(96,165,250,0.4)' : hpPercent > 0.5 ? 'rgba(57,255,20,0.4)' : hpPercent > 0.25 ? 'rgba(255,215,0,0.4)' : 'rgba(255,23,68,0.4)';
       ctx.shadowColor = hpColor;
       ctx.shadowBlur = 4;
       ctx.fillStyle = hpColor;
@@ -1379,6 +2858,33 @@ const GameCanvas: React.FC = () => {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+    // CTF timer and flag status
+    const ctfGameMode = (state as any).gameMode as 'deathmatch' | 'ctf' | undefined;
+    const ctfFlags = (state as any).flags as Flag[] | undefined;
+    if (ctfGameMode === 'ctf' && state.status === 'PLAYING' && ctfFlags?.length >= 2) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const gameTime = (state as any).gameTime as number ?? 0;
+      const remaining = Math.max(0, Math.ceil(CTF_MATCH_DURATION - gameTime));
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 4;
+      ctx.fillText(`${mins}:${secs.toString().padStart(2, '0')}`, canvasWidth / 2, 50);
+      ctx.shadowBlur = 0;
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(59,130,246,0.9)';
+      ctx.fillText(ctfFlags[0]?.carriedBy ? 'FLAG TAKEN' : 'BASE', 30, 45);
+      ctx.fillStyle = 'rgba(239,68,68,0.9)';
+      ctx.textAlign = 'right';
+      ctx.fillText(ctfFlags[1]?.carriedBy ? 'FLAG TAKEN' : 'BASE', canvasWidth - 30, 45);
+      ctx.restore();
+    }
+
     // Custom cursor
     if (state.status === 'PLAYING') {
       ctx.save();
@@ -1414,6 +2920,79 @@ const GameCanvas: React.FC = () => {
 
       ctx.restore();
     }
+
+    // Hero select preview — draw selected character full-body
+    if (uiStateRef.current?.status === 'HERO_SELECT' && heroPreviewCanvasRef.current) {
+      const pc = heroPreviewCanvasRef.current;
+      const pctx = pc.getContext('2d');
+      if (pctx) {
+        const w = pc.width, h = pc.height;
+        pctx.clearRect(0, 0, w, h);
+        pctx.save();
+
+        // Add starburst background
+        pctx.translate(w / 2, h / 2);
+        const numRays = 12;
+        const timeOffset = timeRef.current * 0.5;
+        pctx.fillStyle = '#0f766e'; // Base background (teal-700)
+        pctx.fillRect(-w / 2, -h / 2, w, h);
+
+        pctx.fillStyle = '#14b8a6'; // Rays (teal-500)
+        for (let i = 0; i < numRays; i++) {
+          const angle1 = (i / numRays) * Math.PI * 2 + timeOffset;
+          const angle2 = ((i + 0.5) / numRays) * Math.PI * 2 + timeOffset;
+          pctx.beginPath();
+          pctx.moveTo(0, 0);
+          pctx.lineTo(Math.cos(angle1) * Math.max(w, h), Math.sin(angle1) * Math.max(w, h));
+          pctx.lineTo(Math.cos(angle2) * Math.max(w, h), Math.sin(angle2) * Math.max(w, h));
+          pctx.closePath();
+          pctx.fill();
+        }
+
+        // Inner glow/vignette for background
+        const grad = pctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.8);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+        pctx.fillStyle = grad;
+        pctx.fillRect(-w / 2, -h / 2, w, h);
+
+        pctx.restore();
+
+        pctx.save();
+
+        // Idle animation (breathing)
+        const breathe = Math.sin(timeRef.current * 2.5);
+        const scaleY = 1 + breathe * 0.03;
+        const scaleX = 1 - breathe * 0.01;
+
+        pctx.translate(w / 2, h * 0.7);
+
+        // Drop shadow
+        pctx.fillStyle = 'rgba(0,0,0,0.6)';
+        pctx.filter = 'blur(4px)';
+        pctx.beginPath();
+        pctx.ellipse(0, 5, 50 + breathe * 2, 16 + breathe * 0.5, 0, 0, Math.PI * 2);
+        pctx.fill();
+        pctx.filter = 'none';
+
+        pctx.scale(4.0 * scaleX, 4.0 * scaleY);
+        pctx.translate(0, -breathe * 2);
+
+        const fakeP: any = {
+          heroType: selectedHeroRef.current,
+          vel: { x: 0, y: 0 },
+          isAttacking: false,
+          attackTimer: 0,
+          hasGun: false,
+          hasSword: false,
+          hasChainsaw: false,
+          hasBomb: false
+        };
+        const heroDraw = fakeP.heroType === 'cartman' ? drawCartman : fakeP.heroType === 'kyle' ? drawKyle : fakeP.heroType === 'stanNinja' ? drawStanNinja : fakeP.heroType === 'snoopDogg' ? drawSnoopDogg : drawKenny;
+        heroDraw(pctx, fakeP, timeRef.current, true);
+        pctx.restore();
+      }
+    }
   };
 
   // --- Game Loop ---
@@ -1429,29 +3008,13 @@ const GameCanvas: React.FC = () => {
         mouse: mouseRef.current,
         mouseDown: mouseDownRef.current,
         mouseRightDown: mouseRightDownRef.current,
-        throwBomb: throwBombRef.current
+        throwBomb: mouseDownRef.current
       });
-      // Reset bomb throw after sending
-      throwBombRef.current = false;
-    }
-
-    // Handle contract game finish
-    if (stateRef.current.status === 'VICTORY' && stateRef.current.winnerId && roomContractId !== null && !gameFinished) {
-      setGameFinished(true);
-      if (walletAddress && stateRef.current.winnerId === playerIdRef.current) {
-        contractFinishGame(roomContractId, walletAddress as `0x${string}`).then((txHash) => {
-          if (!txHash) {
-            console.warn('Failed to finish game in contract');
-          }
-        }).catch((err) => {
-          console.error('Error finishing game:', err);
-        });
-      }
     }
 
     draw(ctx, stateRef.current);
     requestRef.current = requestAnimationFrame(tick);
-  }, [roomContractId, walletAddress, gameFinished]);
+  }, []);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -1479,7 +3042,7 @@ const GameCanvas: React.FC = () => {
 
 
   return (
-    <div className={`relative group ${uiState.status === 'PLAYING' ? 'cursor-none' : 'cursor-auto'}`}>
+    <div className={`relative group ${uiState.status === 'PLAYING' ? 'cursor-none' : 'cursor-auto'}`} tabIndex={0}>
       <canvas
         ref={canvasRef}
         width={canvasSize.width}
@@ -1491,11 +3054,6 @@ const GameCanvas: React.FC = () => {
         className="w-full h-full border-4 border-zinc-700 bg-black shadow-2xl"
         style={{ display: 'block' }}
       />
-
-      {/* Wallet Connect - Top Right */}
-      <div className="absolute top-4 right-4 z-50 pointer-events-auto">
-        <WalletConnect onConnect={handleWalletConnect} onDisconnect={handleWalletDisconnect} />
-      </div>
 
       {/* Connection Status */}
       {connectionError && (
@@ -1509,236 +3067,232 @@ const GameCanvas: React.FC = () => {
         <div className="flex items-center gap-2">MOVE <kbd className="bg-zinc-800 p-1 rounded">WASD</kbd></div>
         <div className="flex items-center gap-2">ATTACK/SHOOT <kbd className="bg-zinc-800 p-1 rounded">L-CLICK</kbd></div>
         <div className="flex items-center gap-2 text-gray-300">THROW SWORD <kbd className="bg-zinc-800 p-1 rounded text-gray-300">R-CLICK</kbd></div>
+        <div className="flex items-center gap-2 text-orange-400">FIRE GRENADE <kbd className="bg-zinc-800 p-1 rounded text-orange-400">R-CLICK</kbd></div>
+        <div className="flex items-center gap-2 text-slate-400">SHURIKENS <kbd className="bg-zinc-800 p-1 rounded text-slate-400">L-CLICK</kbd></div>
         <div className="flex items-center gap-2">DODGE <kbd className="bg-zinc-800 p-1 rounded">SPACE</kbd></div>
-        <div className="flex items-center gap-2 text-pink-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-pink-400">E</kbd></div>
+        <div className="flex items-center gap-2 text-pink-400">BOMB <kbd className="bg-zinc-800 p-1 rounded text-pink-400">L-CLICK</kbd></div>
       </div>
 
-      {/* Connect Wallet Modal */}
-      {showConnectModal && !walletConnected && (
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50">
-          <div className="cyber-scanlines">
-            <div className="cyber-particles" />
-          </div>
-          <div className="cyber-panel p-8 max-w-md mx-4 cyber-enter relative z-10">
-            <div className="flex flex-col items-center mb-6">
-              <div className="w-12 h-12 rounded-full border border-cyan-500/30 flex items-center justify-center mb-4" style={{ boxShadow: '0 0 20px rgba(0,255,255,0.15)' }}>
-                <div className="w-3 h-3 rounded-full bg-cyan-400 status-dot" />
-              </div>
-              <h2 className="text-lg font-bold neon-cyan tracking-widest uppercase">CONNECT WALLET</h2>
-              <p className="text-[10px] tracking-widest mt-2" style={{ color: 'rgba(0,255,255,0.35)' }}>OPTIONAL · BLOCKCHAIN FEATURES</p>
-            </div>
-            <p className="text-xs text-center mb-6" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: '1.6' }}>
-              Connect for on-chain wagering or play P2P without wallet. Sepolia network added automatically.
-            </p>
-            <div className="flex flex-col gap-3">
-              <WalletConnect onConnect={handleWalletConnect} onDisconnect={handleWalletDisconnect} />
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="cyber-btn-join px-4 py-3 text-xs tracking-widest uppercase cursor-pointer"
-                style={{ clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))' }}
-              >
-                SKIP · PLAY WITHOUT WALLET
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Connect Wallet Modal (REMOVED) */}
 
-      {/* Menu */}
-      {uiState.status === 'MENU' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: 'radial-gradient(ellipse at 50% 30%, rgba(0,255,255,0.04) 0%, rgba(0,0,0,0.95) 70%)' }}>
-          {/* Background effects */}
-          <div className="cyber-particles" />
-          <div className="digital-rain" />
-          <div className="heartbeat-line" />
-
+      {/* Menu / Hero Select */}
+      {(uiState.status === 'MENU' || uiState.status === 'HERO_SELECT') && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white" style={{ backgroundColor: '#0f172a', fontFamily: "'Comic Sans MS', 'Chalkboard SE', sans-serif" }}>
           {/* Title */}
-          <div className="cyber-enter mb-6 text-center relative z-10">
+          <div className="text-center mb-8 relative z-10 transition-all duration-300 transform hover:scale-105">
             <h1
-              className="text-4xl sm:text-5xl font-extrabold neon-red tracking-[0.15em] glitch-title"
-              data-text="DUEL ARENA"
+              className="text-5xl sm:text-6xl font-black tracking-tight text-orange-600 drop-shadow-md"
+              style={{ textShadow: '4px 4px 0 #1e293b, -2px -2px 0 #1e293b, 2px -2px 0 #1e293b, -2px 2px 0 #1e293b' }}
             >
-              DUEL ARENA
+              SOUTH PARK ROGUES
             </h1>
-            <p className="text-[9px] tracking-[0.5em] mt-3" style={{ color: 'rgba(0,255,255,0.3)' }}>
-              BLOCKCHAIN COMBAT PROTOCOL
+            <p className="text-xl font-bold text-slate-300 mt-2 filter drop-shadow">
+              WASD — Walk | Collect arsenal and survive!
             </p>
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <div className="flex items-center gap-1.5">
-                <Sword size={11} style={{ color: '#ff1744', opacity: 0.6 }} />
-                <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>1v1 COMBAT</span>
-              </div>
-              <div className="w-px h-3" style={{ background: 'rgba(0,255,255,0.15)' }} />
-              <div className="flex items-center gap-1.5">
-                <Users size={11} style={{ color: '#0ff', opacity: 0.6 }} />
-                <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>2 PLAYERS MAX</span>
-              </div>
-            </div>
           </div>
 
-          {!walletConnected && (
-            <div className="cyber-enter-d1 mb-4 px-6 py-2 relative z-10" style={{ background: 'rgba(0,255,255,0.04)', border: '1px solid rgba(0,255,255,0.08)' }}>
-              <p className="text-[10px] tracking-widest text-center" style={{ color: 'rgba(0,255,255,0.5)' }}>
-                WALLET OPTIONAL · CONNECT FOR ON-CHAIN WAGERS
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-5 w-[420px] max-w-[95vw] relative z-10">
-            {/* Create Arena Section */}
-            <div className="cyber-panel p-5 cyber-enter-d1">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4" style={{ background: '#ff1744' }} />
-                  <h2 className="text-xs font-bold tracking-[0.3em] neon-red">CREATE ARENA</h2>
+          {uiState.status === 'MENU' ? (
+            <div className="flex flex-col gap-6 w-[480px] max-w-[95vw] relative z-10">
+              {/* Create Arena Section */}
+              <div className="bg-slate-800 rounded-2xl p-6 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] transform transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-black text-white px-2 py-1 bg-orange-600 rounded-lg transform -skew-x-6 border-2 border-slate-900">CREATE ARENA</h2>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-700 rounded-full font-bold">
+                    <Users size={16} className="text-orange-400" />
+                    <span className="text-sm">2P</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 px-2 py-1" style={{ background: 'rgba(255,23,68,0.06)', border: '1px solid rgba(255,23,68,0.12)' }}>
-                  <Users size={10} style={{ color: 'rgba(255,23,68,0.5)' }} />
-                  <span className="text-[8px] tracking-widest" style={{ color: 'rgba(255,23,68,0.5)' }}>2P ARENA</span>
+                <button
+                  onClick={() => setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } }))}
+                  disabled={isCreatingRoom}
+                  className="w-full mt-6 bg-orange-500 hover:bg-orange-400 text-slate-900 border-4 border-slate-900 rounded-xl px-6 py-4 font-black text-xl flex items-center justify-center gap-3 cursor-pointer shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+                >
+                  <Sword size={24} /> SELECT HERO
+                </button>
+              </div>
+
+              {/* Open Arenas List */}
+              <div className="bg-slate-800 rounded-2xl p-6 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] transform transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-black text-white px-2 py-1 bg-cyan-600 rounded-lg transform -skew-x-6 border-2 border-slate-900">OPEN ARENAS</h2>
+                  <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full">
+                    <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse border-2 border-slate-900" />
+                    <span className="text-sm font-bold">LIVE</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3 max-h-64 overflow-y-auto pr-2">
+                  {openRooms.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-700">
+                      <Sword size={48} className="text-slate-600 mx-auto mb-2 opacity-50" />
+                      <p className="text-lg font-bold text-slate-400">NO ACTIVE ARENAS</p>
+                      <p className="text-sm text-slate-500 mt-1">Create one to begin!</p>
+                    </div>
+                  ) : (
+                    openRooms.map((room, index) => (
+                      <div key={room.roomId} className="flex items-center justify-between p-4 bg-slate-700 rounded-xl border-4 border-slate-900 shadow-md">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-black text-lg text-white">
+                              {room.creatorName}'s Arena
+                            </span>
+                            <div className="flex items-center gap-3 font-bold">
+                              <span className="text-slate-300 flex items-center gap-1">
+                                <Users size={14} /> {room.playerCount}/{room.maxPlayers ?? 2}
+                              </span>
+                              {room.gameMode === 'ctf' && (
+                                <span className="text-cyan-400 text-sm">CTF</span>
+                              )}
+                            </div>
+                          </div>
+                        <button
+                          onClick={() => setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'join', room } }))}
+                          disabled={isJoiningRoom || room.playerCount >= (room.maxPlayers ?? 2)}
+                          className="bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-900 border-4 border-slate-900 rounded-xl px-6 py-3 font-black text-lg cursor-pointer shadow-[0_4px_0_0_#1e293b] active:shadow-none active:translate-y-[4px] transition-all"
+                        >
+                          {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'JOIN'}
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
-              <BetSelector
-                onSelect={setSelectedBet}
-                selectedBet={selectedBet}
-                disabled={isCreatingRoom}
-                showNoStake={!walletConnected}
-              />
-              <button
-                onClick={createRoomWithBet}
-                disabled={isCreatingRoom || (walletConnected && !selectedBet)}
-                className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
-              >
-                {isCreatingRoom ? (
-                  <span className="animate-pulse">INITIALIZING ARENA...</span>
-                ) : (
+            </div>
+          ) : (
+            /* Hero Select Screen — hero left, menu right, same height */
+            <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-stretch">
+              {/* Hero panel — left */}
+              <div className="flex-1 flex flex-col items-center justify-between bg-slate-800 rounded-2xl p-8 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] min-h-[400px] relative overflow-hidden">
+                {/* Background canvas filler */}
+                <canvas
+                  ref={heroPreviewCanvasRef}
+                  width={500}
+                  height={500}
+                  className="bg-transparent absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none"
+                />
+                {/* Inner shadow overlay for depth */}
+                <div className="absolute inset-0 z-0 pointer-events-none shadow-[inset_0_4px_20px_rgba(0,0,0,0.5)] rounded-xl" />
+
+                <h2 className="text-3xl font-black text-white drop-shadow-md tracking-wide relative z-10 mt-2">CHOOSE YOUR FIGHTER</h2>
+
+                <div className="flex items-center justify-between w-full relative z-10 mt-auto mb-auto px-4">
+                  <button
+                    onClick={() => {
+                      const idx = HERO_ORDER.indexOf(selectedHero);
+                      setSelectedHero(HERO_ORDER[(idx - 1 + HERO_ORDER.length) % HERO_ORDER.length]);
+                    }}
+                    className="w-16 h-16 rounded-full bg-slate-800/80 hover:bg-slate-700 border-4 border-slate-500 flex items-center justify-center text-3xl font-black text-white shrink-0 transition-transform active:scale-90 shadow-[0_4px_10px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={() => {
+                      const idx = HERO_ORDER.indexOf(selectedHero);
+                      setSelectedHero(HERO_ORDER[(idx + 1) % HERO_ORDER.length]);
+                    }}
+                    className="w-16 h-16 rounded-full bg-slate-800/80 hover:bg-slate-700 border-4 border-slate-500 flex items-center justify-center text-3xl font-black text-white shrink-0 transition-transform active:scale-90 shadow-[0_4px_10px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+                  >
+                    →
+                  </button>
+                </div>
+
+                <span className="font-black text-4xl mb-4 text-slate-100 font-[Chalkboard SE] tracking-wider drop-shadow-[0_4px_6px_rgba(0,0,0,1)] relative z-10">
+                  {selectedHero === 'kenny' ? 'KENNY' : selectedHero === 'cartman' ? 'CARTMAN' : selectedHero === 'kyle' ? 'KYLE' : selectedHero === 'stanNinja' ? 'STAN NINJA' : 'SNOOP DOGG'}
+                </span>
+              </div>
+
+              {/* Menu panel — right */}
+              <div className="flex-1 flex flex-col bg-slate-800 rounded-2xl p-8 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] min-h-[400px]">
+                {uiState.actionParams?.type === 'create' && (
                   <>
-                    <Sword size={16} /> CREATE ARENA
+                    <div className="mb-3 p-3 bg-slate-700 rounded-xl border-4 border-slate-600">
+                      <span className="font-bold text-slate-300 block mb-1 text-sm">Game mode</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCreateRoomGameMode('deathmatch')}
+                          className={`flex-1 px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomGameMode === 'deathmatch' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                        >
+                          DEATHMATCH
+                        </button>
+                        <button
+                          onClick={() => setCreateRoomGameMode('ctf')}
+                          className={`flex-1 px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomGameMode === 'ctf' ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                        >
+                          CTF
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mb-3 p-3 bg-slate-700 rounded-xl border-4 border-slate-600">
+                      <span className="font-bold text-slate-300 block mb-1 text-sm">Players in arena</span>
+                      <div className="flex gap-2 flex-wrap">
+                        {[2, 3, 4, 5, 6].map((n) => (
+                          <button
+                            key={n}
+                            onClick={() => setCreateRoomMaxPlayers(n)}
+                            className={`px-4 py-2 rounded-lg font-black border-2 transition-all ${createRoomMaxPlayers === n ? 'bg-cyan-500 border-cyan-400 text-slate-900' : 'bg-slate-600 border-slate-500 text-slate-300 hover:border-slate-400'}`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </>
                 )}
-              </button>
-            </div>
 
-            {/* Open Arenas List */}
-            <div className="cyber-panel p-5 cyber-enter-d2">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4" style={{ background: '#0ff' }} />
-                  <h2 className="text-xs font-bold tracking-[0.3em] neon-cyan">OPEN ARENAS</h2>
+                <div className="flex gap-4 mt-auto">
+                  <button
+                    onClick={() => setUiState(prev => ({ ...prev, status: 'MENU', actionParams: undefined }))}
+                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white border-4 border-slate-900 rounded-xl px-4 py-4 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+                  >
+                    BACK
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (uiState.actionParams?.type === 'create') {
+                        createRoom();
+                      } else if (uiState.actionParams?.type === 'join' && uiState.actionParams.room) {
+                        joinOpenRoom(uiState.actionParams.room);
+                      }
+                    }}
+                    className="flex-2 bg-green-500 hover:bg-green-400 text-slate-900 border-4 border-slate-900 rounded-xl px-4 py-4 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+                  >
+                    {uiState.actionParams?.type === 'create' ? 'CREATE ARENA' : uiState.actionParams?.type === 'join' ? 'JOIN ARENA' : 'ENTER ARENA'}
+                  </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full status-dot" style={{ background: '#39ff14', boxShadow: '0 0 6px #39ff14' }} />
-                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(57,255,20,0.5)' }}>LIVE</span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto cyber-scroll">
-                {openRooms.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="mb-3">
-                      <Sword size={24} style={{ color: 'rgba(255,255,255,0.08)', margin: '0 auto' }} />
-                    </div>
-                    <p className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                      NO ACTIVE ARENAS
-                    </p>
-                    <p className="text-[9px] mt-2" style={{ color: 'rgba(0,255,255,0.2)' }}>
-                      CREATE ONE TO BEGIN
-                    </p>
-                  </div>
-                ) : (
-                  openRooms.map((room, index) => (
-                    <div key={room.roomId} className="room-card flex items-center justify-between p-3">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center justify-center w-5 h-5 rounded" style={{ background: 'rgba(255,23,68,0.12)', border: '1px solid rgba(255,23,68,0.25)' }}>
-                            <Sword size={10} style={{ color: '#ff1744' }} />
-                          </div>
-                          <span className="font-bold text-[11px]" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                            {room.creatorName}&apos;s Arena
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 ml-7">
-                          <span className="text-[10px] font-bold neon-green">{room.betDisplay}</span>
-                          <span className="text-[9px] flex items-center gap-1" style={{ color: 'rgba(0,255,255,0.4)' }}>
-                            <Users size={10} /> {room.playerCount}/2
-                          </span>
-                          {room.playerCount < 2 && (
-                            <span className="text-[8px] tracking-wider px-1.5 py-0.5 animate-pulse" style={{ color: '#39ff14', background: 'rgba(57,255,20,0.08)', border: '1px solid rgba(57,255,20,0.15)' }}>
-                              OPEN
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => joinOpenRoom(room)}
-                        disabled={isJoiningRoom || room.playerCount >= 2}
-                        className="cyber-btn cyber-btn-join px-4 py-2 text-[10px] font-bold tracking-widest cursor-pointer"
-                      >
-                        {isJoiningRoom ? '···' : room.playerCount >= 2 ? 'FULL' : 'JOIN'}
-                      </button>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Lobby — waiting for opponent */}
       {uiState.status === 'LOBBY' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: 'radial-gradient(ellipse at 50% 40%, rgba(255,23,68,0.06) 0%, rgba(0,0,0,0.95) 70%)' }}>
-          <div className="cyber-particles" />
-          <div className="heartbeat-line" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white" style={{ backgroundColor: '#0f172a', fontFamily: "'Comic Sans MS', 'Chalkboard SE', sans-serif" }}>
 
-          <div className="cyber-enter relative z-10 flex flex-col items-center">
-            {/* Pulsing sword icon */}
-            <div className="mb-6 pulse-border p-6 rounded-full" style={{ background: 'rgba(255,23,68,0.05)' }}>
-              <Sword size={40} style={{ color: '#ff1744', filter: 'drop-shadow(0 0 12px rgba(255,23,68,0.6))' }} />
-            </div>
-
+          <div className="bg-slate-800 p-8 rounded-3xl border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] flex flex-col items-center max-w-lg w-full z-10">
             <h2
-              className="text-2xl font-bold tracking-[0.3em] mb-2 glitch-title neon-red"
-              data-text="WAITING FOR CHALLENGER"
+              className="text-4xl sm:text-5xl font-black text-orange-500 mb-2 text-center"
+              style={{ textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' }}
             >
               WAITING FOR CHALLENGER
             </h2>
-            <p className="text-[9px] tracking-[0.5em] mb-8" style={{ color: 'rgba(0,255,255,0.3)' }}>
-              ARENA INITIALIZED · SCANNING FOR OPPONENTS
+            <p className="text-lg font-bold text-slate-400 mb-8">
+              Arena initialized · Scanning for opponents
             </p>
 
-            {roomBetAmount && (
-              <div className="cyber-panel p-4 mb-6 text-center cyber-enter-d1 w-64">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>WAGER</span>
-                  <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>POOL</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold neon-green">{formatEther(roomBetAmount)} ETH</span>
-                  <span className="text-lg font-bold neon-cyan">{formatEther(roomBetAmount * 2n)} ETH</span>
-                </div>
-                <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(0,255,255,0.08)' }}>
-                  <span className="text-[9px]" style={{ color: 'rgba(57,255,20,0.4)' }}>
-                    WINNER TAKES {formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH (95%)
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="cyber-enter-d1 mb-6 flex items-center gap-3 px-5 py-3" style={{ background: 'rgba(0,255,255,0.03)', border: '1px solid rgba(0,255,255,0.1)' }}>
-              <Users size={16} style={{ color: '#0ff' }} />
-              <span className="text-sm tracking-widest neon-cyan">{uiState.playerCount}/2</span>
-              <span className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>GLADIATORS</span>
+            <div className="bg-slate-700 border-4 border-slate-800 rounded-xl mb-6 flex items-center justify-center gap-4 px-6 py-4">
+              <Users size={24} className="text-cyan-400" />
+              <span className="text-3xl font-black text-cyan-400">{uiState.playerCount}/{isHost ? createRoomMaxPlayers : (stateRef.current.maxPlayers ?? 2)}</span>
+              <span className="text-lg font-bold text-slate-400">Gladiators</span>
             </div>
 
-            {uiState.playerCount >= 2 && (
-              <div className="cyber-enter-d2 mb-4 px-6 py-3 text-center" style={{ background: 'rgba(57,255,20,0.05)', border: '1px solid rgba(57,255,20,0.2)' }}>
-                <p className="text-sm font-bold neon-green tracking-widest animate-pulse">
+            {uiState.playerCount >= (isHost ? createRoomMaxPlayers : (stateRef.current.maxPlayers ?? 2)) ? (
+              <div className="bg-green-500 border-4 border-green-700 rounded-xl mb-6 px-6 py-4 text-center w-full animate-bounce">
+                <p className="text-xl font-black text-white" style={{ textShadow: '1px 1px 0 #000' }}>
                   OPPONENT FOUND · INITIATING COMBAT
                 </p>
               </div>
-            )}
-            {uiState.playerCount < 2 && (
-              <p className="text-[10px] tracking-widest animate-pulse" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                SCANNING LOBBY FOR OPPONENTS...
+            ) : (
+              <p className="text-lg font-bold text-slate-400 animate-pulse mb-6">
+                Scanning lobby for opponents...
               </p>
             )}
 
@@ -1747,7 +3301,7 @@ const GameCanvas: React.FC = () => {
                 partyClientRef.current?.disconnect();
                 setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
               }}
-              className="cyber-btn cyber-btn-join mt-8 px-6 py-2 text-[10px] tracking-widest cursor-pointer"
+              className="w-full bg-slate-600 hover:bg-slate-500 text-white border-4 border-slate-900 rounded-xl px-4 py-3 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
             >
               ABORT MISSION
             </button>
@@ -1755,138 +3309,82 @@ const GameCanvas: React.FC = () => {
         </div>
       )}
 
-      {/* Victory */}
+      {/* Victory / Defeat */}
       {uiState.status === 'VICTORY' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-[monospace] cyber-scanlines" style={{ background: uiState.winner === playerIdRef.current ? 'radial-gradient(ellipse at 50% 30%, rgba(255,215,0,0.08) 0%, rgba(0,0,0,0.95) 70%)' : 'radial-gradient(ellipse at 50% 30%, rgba(255,23,68,0.08) 0%, rgba(0,0,0,0.95) 70%)' }}>
-          <div className="cyber-particles" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white" style={{ backgroundColor: '#0f172a', fontFamily: "'Comic Sans MS', 'Chalkboard SE', sans-serif" }}>
 
-          {uiState.winner === playerIdRef.current ? (
-            <div className="cyber-enter flex flex-col items-center relative z-10">
-              {/* Victory glow */}
-              <div className="victory-flash mb-6 p-5 rounded-full" style={{ background: 'rgba(255,215,0,0.05)' }}>
-                <Trophy size={64} style={{ color: '#ffd700', filter: 'drop-shadow(0 0 20px rgba(255,215,0,0.6))' }} />
-              </div>
-
-              <h2
-                className="text-4xl sm:text-5xl font-extrabold tracking-[0.3em] mb-2 glitch-title neon-gold"
-                data-text="VICTORY"
-              >
-                VICTORY
-              </h2>
-              <p className="text-[10px] tracking-[0.5em] mb-8" style={{ color: 'rgba(255,215,0,0.4)' }}>
-                COMBAT PROTOCOL COMPLETE · CHAMPION
-              </p>
-
-              {roomBetAmount && (
-                <div className="cyber-panel p-5 mb-6 cyber-enter-d1 w-80">
-                  <div className="text-center mb-4">
-                    <span className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>REWARD BREAKDOWN</span>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-2 pb-2" style={{ borderBottom: '1px solid rgba(0,255,255,0.06)' }}>
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>POOL TOTAL</span>
-                    <span className="text-sm font-bold neon-cyan">{formatEther(roomBetAmount * 2n)} ETH</span>
-                  </div>
-                  <div className="flex items-center justify-between mb-2 pb-2" style={{ borderBottom: '1px solid rgba(0,255,255,0.06)' }}>
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>PLATFORM FEE (5%)</span>
-                    <span className="text-sm" style={{ color: 'rgba(255,23,68,0.6)' }}>-{formatEther(roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n)} ETH</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[10px] font-bold neon-green">YOUR REWARD</span>
-                    <span className="text-xl font-bold neon-green">{formatEther(roomBetAmount * 2n - (roomBetAmount * 2n * TREASURY_FEE_PERCENT / 100n))} ETH</span>
-                  </div>
-
-                  {roomContractId !== null && (
-                    <button
-                      onClick={async () => {
-                        if (roomContractId === null) return;
-                        setClaimingReward(true);
-                        try {
-                          const txHash = await contractClaimReward(roomContractId);
-                          if (txHash) {
-                            showToast('Reward claimed successfully!');
-                          } else {
-                            showToast('Contract not available', 'error');
-                          }
-                        } catch (error: any) {
-                          console.error('Error claiming reward:', error);
-                          showToast('Failed to claim reward', 'error');
-                        } finally {
-                          setClaimingReward(false);
-                        }
-                      }}
-                      disabled={claimingReward}
-                      className="cyber-btn w-full mt-4 px-6 py-3 font-bold text-xs tracking-[0.2em] flex items-center justify-center gap-3 cursor-pointer"
-                    >
-                      {claimingReward ? (
-                        <span className="animate-pulse">CLAIMING...</span>
-                      ) : (
-                        'CLAIM REWARD'
-                      )}
-                    </button>
-                  )}
+          <div className="bg-slate-800 p-8 rounded-3xl border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] flex flex-col items-center max-w-lg w-full z-10 text-center">
+            {(() => {
+              const isCTF = uiState.winnerTeamId !== undefined && uiState.winnerTeamId !== null;
+              const myTeam = stateRef.current.players[playerIdRef.current]?.teamId;
+              const myTeamWon = isCTF ? myTeam === uiState.winnerTeamId : uiState.winner === playerIdRef.current;
+              return myTeamWon;
+            })() ? (
+              <>
+                <div className="mb-6 p-4 rounded-full bg-yellow-500 border-4 border-yellow-700 shadow-[0_0_20px_rgba(234,179,8,0.5)]">
+                  <Trophy size={64} className="text-yellow-100" />
                 </div>
-              )}
-            </div>
-          ) : (
-            <div className="cyber-enter flex flex-col items-center relative z-10">
-              <div className="mb-6 p-5 rounded-full" style={{ background: 'rgba(255,23,68,0.05)' }}>
-                <User size={64} style={{ color: '#ff1744', filter: 'drop-shadow(0 0 15px rgba(255,23,68,0.4))', opacity: 0.6 }} />
-              </div>
 
-              <h2
-                className="text-4xl sm:text-5xl font-extrabold tracking-[0.3em] mb-2 glitch-title neon-red"
-                data-text="DEFEATED"
-              >
-                DEFEATED
-              </h2>
-              <p className="text-[10px] tracking-[0.5em] mb-4" style={{ color: 'rgba(255,23,68,0.4)' }}>
-                COMBAT PROTOCOL TERMINATED
-              </p>
+                <h2
+                  className="text-5xl sm:text-6xl font-black text-yellow-400 mb-2"
+                  style={{ textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' }}
+                >
+                  VICTORY
+                </h2>
+                <p className="text-lg font-bold text-slate-400 mb-8">
+                  {uiState.winnerTeamId !== undefined && uiState.winnerTeamId !== null
+                    ? `TEAM ${uiState.winnerTeamId + 1} WINS · FLAG SECURED`
+                    : 'COMBAT PROTOCOL COMPLETE · CHAMPION'}
+                </p>
 
-              {roomBetAmount && (
-                <div className="cyber-panel p-4 mb-6 cyber-enter-d1 w-72 text-center">
-                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>FUNDS LOST</span>
-                  <div className="text-lg font-bold mt-1" style={{ color: 'rgba(255,23,68,0.7)' }}>-{formatEther(roomBetAmount)} ETH</div>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 p-4 rounded-full bg-red-500 border-4 border-red-700 shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                  <User size={64} className="text-red-100" />
                 </div>
-              )}
-            </div>
-          )}
 
-          <button
-            onClick={() => {
-              partyClientRef.current?.disconnect();
-              setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
-            }}
-            className="cyber-btn cyber-btn-join mt-4 px-8 py-3 text-[10px] font-bold tracking-widest cursor-pointer relative z-10"
-          >
-            BACK TO LOBBY
-          </button>
+                <h2
+                  className="text-5xl sm:text-6xl font-black text-red-500 mb-2"
+                  style={{ textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' }}
+                >
+                  DEFEATED
+                </h2>
+                <p className="text-lg font-bold text-slate-400 mb-8">
+                  {uiState.winnerTeamId !== undefined && uiState.winnerTeamId !== null
+                    ? `TEAM ${(uiState.winnerTeamId ?? 0) + 1} CAPTURED THE FLAG`
+                    : 'COMBAT PROTOCOL TERMINATED'}
+                </p>
+
+              </>
+            )}
+
+            <button
+              onClick={() => {
+                partyClientRef.current?.disconnect();
+                setUiState(prev => ({ ...prev, status: 'MENU', winner: '' }));
+              }}
+              className="w-full bg-slate-600 hover:bg-slate-500 text-white border-4 border-slate-900 rounded-xl px-4 py-3 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+            >
+              BACK TO LOBBY
+            </button>
+          </div>
         </div>
       )}
 
       {/* Toast notification */}
+      {/* Toast notification */}
       {toast && (
         <div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999] cyber-enter font-[monospace]"
-          style={{
-            background: toast.type === 'success'
-              ? 'linear-gradient(135deg, rgba(57,255,20,0.12) 0%, rgba(0,0,0,0.9) 100%)'
-              : 'linear-gradient(135deg, rgba(255,23,68,0.12) 0%, rgba(0,0,0,0.9) 100%)',
-            border: `1px solid ${toast.type === 'success' ? 'rgba(57,255,20,0.3)' : 'rgba(255,23,68,0.3)'}`,
-            clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
-            padding: '12px 24px',
-            backdropFilter: 'blur(8px)',
-          }}
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999]"
+          style={{ fontFamily: "'Comic Sans MS', 'Chalkboard SE', sans-serif" }}
         >
-          <span
-            className={`text-xs tracking-widest font-bold ${toast.type === 'success' ? 'neon-green' : 'neon-red'}`}
-          >
+          <div className={`px-6 py-3 rounded-xl border-4 shadow-lg font-black text-sm tracking-wide ${toast.type === 'success' ? 'bg-green-500 border-green-700 text-white' : 'bg-red-500 border-red-700 text-white'}`}>
             {toast.message}
-          </span>
+          </div>
         </div>
       )}
-    </div>
+    </div >
   );
 };
 

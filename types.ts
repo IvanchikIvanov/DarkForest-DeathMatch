@@ -29,6 +29,8 @@ export interface Entity {
 export interface Player extends Entity {
   type: EntityType.PLAYER;
   playerId: string; // Network ID
+  heroType?: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg';
+  elevation: number; // 0 = ground, 1 = roof
 
   // Movement / Dodge
   isDodging: boolean;
@@ -45,8 +47,15 @@ export interface Player extends Entity {
   // Bomb
   bombCooldown: number;
 
+  // Special Weapons
+  hasFlamethrower?: boolean;
+  flamethrowerCooldown?: number;
+
   // Stats
   score: number;
+
+  // CTF
+  teamId?: 0 | 1;
 }
 
 export interface HealthPickup {
@@ -62,12 +71,111 @@ export interface GunPickup {
   active: boolean;
 }
 
+export interface MinigunPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
 export interface Bullet {
   id: string;
   pos: Vector2;
   vel: Vector2;
   ownerId: string;
   active: boolean;
+}
+
+export interface Unicorn {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  angle: number;
+  active: boolean;
+}
+
+export interface Satan {
+  id: string;
+  pos: Vector2;
+  createdAt: number;
+  lastStrikeAt: number;
+  lightningTarget: Vector2 | null;
+  riftOpen: number;
+  visibleY: number;
+  riftState: 'shaking' | 'opening' | 'rising' | 'active';
+}
+
+export interface ShurikenPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+export interface ShurikenProjectile {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  rot: number;
+  ownerId: string;
+  returning: boolean;
+  life: number;
+  hitPlayerIds: string[];
+  active: boolean;
+}
+
+export interface BurningGrenadePickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+export interface BurningGrenade {
+  id: string;
+  startPos: Vector2;
+  targetPos: Vector2;
+  progress: number;
+  arcHeight: number;
+  ownerId: string;
+  active: boolean;
+}
+
+export interface FireZone {
+  id: string;
+  pos: Vector2;
+  radius: number;
+  maxRadius: number;
+  duration: number;
+  createdAt: number;
+  active: boolean;
+}
+
+export interface FlamethrowerPickup {
+  id: string;
+  pos: Vector2;
+  active: boolean;
+}
+
+export interface Flame {
+  id: string;
+  pos: Vector2;
+  vel: Vector2;
+  ownerId: string;
+  active: boolean;
+  life: number;
+  maxLife: number;
+  size?: number;
+}
+
+export interface ElectricPanel {
+  pos: Vector2;
+  radius: number;
+}
+
+export interface Flag {
+  id: string;
+  teamId: 0 | 1;
+  pos: Vector2;
+  carriedBy: string | null;
+  basePos: Vector2;
 }
 
 export interface Particle extends Entity {
@@ -105,13 +213,30 @@ export interface GameState {
   obstacles: Obstacle[];
   healthPickups: HealthPickup[];
   gunPickups: GunPickup[];
+  minigunPickups?: MinigunPickup[];
   bullets: Bullet[];
+  unicorns?: Unicorn[];
+  satan?: Satan | null;
+  shurikenPickups?: ShurikenPickup[];
+  shurikenProjectiles?: ShurikenProjectile[];
+  burningGrenadePickups?: BurningGrenadePickup[];
+  burningGrenades?: BurningGrenade[];
+  fireZones?: FireZone[];
+  electricPanel?: ElectricPanel;
+  electricChargerId?: string | null;
+  flamethrowerPickups?: FlamethrowerPickup[];
+  flames?: Flame[];
   tileMap?: number[][]; // Grid of tile indices
   shake: number;
   status: 'MENU' | 'LOBBY' | 'PLAYING' | 'VICTORY';
   winnerId?: string;
+  gameMode?: 'deathmatch' | 'ctf';
+  flags?: Flag[];
+  winnerTeamId?: 0 | 1;
+  maxPlayers?: number;
   lastHealthSpawnTime?: number;
   lastGunSpawnTime?: number;
+  lastFlamethrowerSpawnTime?: number;
 }
 
 export interface GameAssets {

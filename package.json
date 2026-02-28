@@ -18,15 +18,13 @@
     "deploy:local": "hardhat run scripts/deploy.cjs --network hardhat"
   },
   "dependencies": {
-    "@coinbase/onchainkit": "^1.1.2",
-    "@tanstack/react-query": "^5.90.21",
+    "@playdotfun/game-sdk": "^1.0.7",
+    "@playdotfun/server-sdk": "^1.0.1",
     "lucide-react": "^0.554.0",
     "next": "^16.1.6",
     "partysocket": "^1.0.2",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "viem": "^2.45.3",
-    "wagmi": "^2.19.5"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
