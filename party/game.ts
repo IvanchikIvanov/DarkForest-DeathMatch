@@ -33,7 +33,7 @@ interface Entity {
 interface Player extends Entity {
   type: EntityType.PLAYER;
   playerId: string;
-  heroType?: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg';
+  heroType?: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero';
   isDodging: boolean;
   dodgeTimer: number;
   cooldown: number;
@@ -638,13 +638,14 @@ const generateArena = (): { walls: Wall[], tileMap: number[][], obstacles: Obsta
   return { walls, tileMap, obstacles };
 };
 
-type HeroType = 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg';
+type HeroType = 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero';
 const HERO_STATS: Record<HeroType, { hp: number; speedMod: number; gunCooldown: number; canThrowSword: boolean }> = {
   kenny: { hp: 85, speedMod: 1.15, gunCooldown: 0.35, canThrowSword: false },
   cartman: { hp: 120, speedMod: 0.85, gunCooldown: 0.25, canThrowSword: true },
   kyle: { hp: 95, speedMod: 1.05, gunCooldown: 0.3, canThrowSword: true },
   stanNinja: { hp: 90, speedMod: 1.2, gunCooldown: 0.28, canThrowSword: true },
   snoopDogg: { hp: 100, speedMod: 0.95, gunCooldown: 0.4, canThrowSword: true },
+  superhero: { hp: 105, speedMod: 1.1, gunCooldown: 0.28, canThrowSword: true },
 };
 const createPlayer = (id: string, index: number, heroType: HeroType = 'kenny', maxPlayers: number = 2, teamId?: 0 | 1): Player => {
   const centerX = CANVAS_WIDTH / 2;
@@ -1124,7 +1125,7 @@ export default class GameRoom implements Party.Server {
     if (ctx?.request?.url) {
       try {
         const heroParam = new URL(ctx.request.url).searchParams.get('heroType');
-        if (['cartman', 'kyle', 'stanNinja', 'snoopDogg'].includes(heroParam || '')) heroType = heroParam as HeroType;
+        if (['cartman', 'kyle', 'stanNinja', 'snoopDogg', 'superhero'].includes(heroParam || '')) heroType = heroParam as HeroType;
       } catch (e) {
         console.error('[GAME] Error parsing heroType from URL', e);
       }

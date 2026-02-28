@@ -47,7 +47,7 @@ export class PartyClient {
     }
 
     // Create or join a room
-    connect(roomId: string, heroType: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' = 'kenny'): void {
+    connect(roomId: string, heroType: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero' = 'kenny'): void {
         this.roomId = roomId;
 
         // Close existing connection if any

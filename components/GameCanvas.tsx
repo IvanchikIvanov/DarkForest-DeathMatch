@@ -234,14 +234,14 @@ const GameCanvas: React.FC = () => {
   };
 
   // State for hero selection
-  const [selectedHero, setSelectedHero] = useState<'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg'>('cartman');
+  const [selectedHero, setSelectedHero] = useState<'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero'>('cartman');
   const heroPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const uiStateRef = useRef(uiState);
   const selectedHeroRef = useRef(selectedHero);
   uiStateRef.current = uiState;
   selectedHeroRef.current = selectedHero;
 
-  const HERO_ORDER: ('kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg')[] = ['kenny', 'cartman', 'kyle', 'stanNinja', 'snoopDogg'];
+  const HERO_ORDER: ('kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero')[] = ['kenny', 'cartman', 'kyle', 'stanNinja', 'snoopDogg', 'superhero'];
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const k = e.key.toLowerCase();
@@ -2421,6 +2421,198 @@ const GameCanvas: React.FC = () => {
       c.restore();
     };
 
+    const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, points: number, innerRatio: number) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      for (let i = 0; i < points; i++) {
+        ctx.rotate(Math.PI / points);
+        ctx.lineTo(0, -(r * innerRatio));
+        ctx.rotate(Math.PI / points);
+        ctx.lineTo(0, -r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    const drawSuperhero = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
+      const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
+      const isMoving = velMag > 5;
+      const hop = isMoving ? Math.abs(Math.sin(t * 15)) * 12 : 0;
+      const sideTilt = isMoving ? Math.sin(t * 15) * 0.1 : 0;
+      const attackProgress = p.isAttacking ? 1 - ((p.attackTimer ?? 0) / 0.2) : 0;
+      const swing = p.isAttacking ? Math.sin(attackProgress * Math.PI) * -2.8 : 0;
+      const scaleY = 1 + (isMoving ? 0 : Math.sin(t * 0.5) * 0.02);
+      const legOffset = isMoving ? Math.sin(t * 15) * 10 : 0;
+      const armOffset = isMoving ? Math.sin(t * 15) * 8 : 0;
+      const headCenterY = -55 * scaleY;
+
+      c.fillStyle = 'rgba(0,0,0,0.2)';
+      c.beginPath();
+      c.ellipse(0, 10, 28, 8, 0, 0, Math.PI * 2);
+      c.fill();
+
+      c.translate(0, -hop);
+      c.rotate(sideTilt);
+
+      c.lineWidth = 2;
+      c.strokeStyle = '#000';
+
+      c.fillStyle = '#452b1f';
+      c.beginPath();
+      c.ellipse(-15 + legOffset, 15, 12, 7, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(15 - legOffset, 15, 12, 7, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#a88d71';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-22, -20, 44, 40, [5]);
+      else c.rect(-22, -20, 44, 40);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-22, -38 * scaleY, 44, 28 * scaleY, [5]);
+      else c.rect(-22, -38 * scaleY, 44, 28 * scaleY);
+      c.fill();
+      c.stroke();
+
+      c.strokeStyle = '#000';
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-10, -35 * scaleY);
+      c.quadraticCurveTo(-5, -30 * scaleY, 0, -35 * scaleY);
+      c.moveTo(2, -33 * scaleY);
+      c.quadraticCurveTo(7, -28 * scaleY, 12, -33 * scaleY);
+      c.stroke();
+
+      c.lineWidth = 2;
+      c.save();
+      c.translate(-25, -28 + armOffset);
+      c.rotate(0.2);
+      c.fillStyle = '#fecaca';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(0, 0, 10, 18, 5);
+      else c.rect(0, 0, 10, 18);
+      c.fill();
+      c.stroke();
+      c.restore();
+
+      c.save();
+      c.translate(25, -28 - armOffset);
+      c.rotate(-0.2);
+      c.fillStyle = '#fecaca';
+      c.beginPath();
+      if (typeof c.roundRect === 'function') c.roundRect(-10, 0, 10, 18, 5);
+      else c.rect(-10, 0, 10, 18);
+      c.fill();
+      c.stroke();
+      c.restore();
+
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.ellipse(0, headCenterY - 18, 50, 38, 0, 0, Math.PI * 2);
+      c.fill();
+
+      for (let i = 0; i < 10; i++) {
+        const a = Math.PI + (i / 9) * Math.PI;
+        const hx = Math.cos(a) * 46;
+        const hy = (headCenterY - 18) + Math.sin(a) * 34;
+        c.beginPath();
+        c.arc(hx, hy, 17, 0, Math.PI * 2);
+        c.fill();
+      }
+
+      c.fillStyle = '#fecaca';
+      c.beginPath();
+      c.arc(0, headCenterY, 34, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle = '#ec4899';
+      c.strokeStyle = '#000';
+      drawStar(c, -14, headCenterY - 4, 16, 5, 0.5);
+      drawStar(c, 14, headCenterY - 4, 16, 5, 0.5);
+
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(-14, headCenterY - 4, 2.5, 0, Math.PI * 2);
+      c.arc(14, headCenterY - 4, 2.5, 0, Math.PI * 2);
+      c.fill();
+
+      c.beginPath();
+      c.moveTo(-6, headCenterY + 12);
+      c.quadraticCurveTo(0, headCenterY + 14, 6, headCenterY + 12);
+      c.stroke();
+
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(-34, -5, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      c.save();
+      c.translate(34, -5);
+      c.rotate(swing);
+
+      c.fillStyle = '#000';
+      c.beginPath();
+      c.arc(0, 0, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      const hasGun = (p as any).hasGun;
+      const hasMinigun = (p as any).hasMinigun;
+      const hasFlamethrower = (p as any).hasFlamethrower;
+      const hasSword = (p as any).hasSword;
+      const hasChainsaw = (p as any).hasChainsaw;
+      const hasBomb = (p as any).hasBomb;
+
+      if (hasMinigun) {
+        const minigunAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawMinigun(c, minigunAngle, 1, false, t, p.isAttacking);
+      } else if (hasFlamethrower) {
+        const flamethrowerAngle = -Math.PI / 2 + (p.isAttacking ? -0.1 : 0);
+        drawFlamethrower(c, flamethrowerAngle, 1, false, t, p.isAttacking);
+      } else if (hasGun) {
+        const pistolAngle = -Math.PI / 2 + (p.isAttacking ? -0.3 : 0);
+        drawPistol(c, pistolAngle, 0.6, false, t, p.isAttacking);
+      } else if (hasBomb) {
+        const bombScale = p.isAttacking ? 1.2 + Math.sin(t * 20) * 0.2 : 0.8;
+        drawBomb(c, 0, bombScale, false, t);
+      } else if (hasChainsaw) {
+        const chainsawAngle = -Math.PI / 2 + (p.isAttacking ? Math.sin(t * 40) * 0.15 : 0);
+        drawChainsaw(c, chainsawAngle, 0.6, false, t);
+      } else if (hasSword) {
+        drawSword(c, swing, 1, false, t);
+        if (p.isAttacking) {
+          c.strokeStyle = 'rgba(255,255,255,0.4)';
+          c.lineWidth = 50;
+          c.lineCap = 'round';
+          c.beginPath();
+          c.arc(0, 0, 160, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2);
+          c.stroke();
+          c.lineWidth = 2;
+        }
+      } else {
+        c.fillStyle = '#000';
+        c.beginPath();
+        c.arc(0, 0, 9, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
+      }
+
+      c.restore();
+    };
+
     const drawKyle = (c: CanvasRenderingContext2D, p: any, t: number, isMe: boolean) => {
       const velMag = Math.sqrt((p.vel?.x || 0) ** 2 + (p.vel?.y || 0) ** 2);
       const isMoving = velMag > 5;
@@ -2821,7 +3013,7 @@ const GameCanvas: React.FC = () => {
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate((p.angle ?? 0) + Math.PI / 2);
       ctx.scale(r / 35 * elevationScale, r / 35 * elevationScale);
-      const heroDraw = p.heroType === 'cartman' ? drawCartman : p.heroType === 'kyle' ? drawKyle : p.heroType === 'stanNinja' ? drawStanNinja : p.heroType === 'snoopDogg' ? drawSnoopDogg : drawKenny;
+      const heroDraw = p.heroType === 'cartman' ? drawCartman : p.heroType === 'kyle' ? drawKyle : p.heroType === 'stanNinja' ? drawStanNinja : p.heroType === 'snoopDogg' ? drawSnoopDogg : p.heroType === 'superhero' ? drawSuperhero : drawKenny;
       heroDraw(ctx, p, timeRef.current, isMe);
       ctx.restore();
 
@@ -3036,7 +3228,7 @@ const GameCanvas: React.FC = () => {
           hasChainsaw: false,
           hasBomb: false
         };
-        const heroDraw = fakeP.heroType === 'cartman' ? drawCartman : fakeP.heroType === 'kyle' ? drawKyle : fakeP.heroType === 'stanNinja' ? drawStanNinja : fakeP.heroType === 'snoopDogg' ? drawSnoopDogg : drawKenny;
+        const heroDraw = fakeP.heroType === 'cartman' ? drawCartman : fakeP.heroType === 'kyle' ? drawKyle : fakeP.heroType === 'stanNinja' ? drawStanNinja : fakeP.heroType === 'snoopDogg' ? drawSnoopDogg : fakeP.heroType === 'superhero' ? drawSuperhero : drawKenny;
         heroDraw(pctx, fakeP, timeRef.current, true);
         pctx.restore();
       }
@@ -3306,7 +3498,7 @@ const GameCanvas: React.FC = () => {
                     ←
                   </button>
                   <span className="font-black text-3xl text-slate-100 tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                    {selectedHero === 'kenny' ? 'KENNY' : selectedHero === 'cartman' ? 'CARTMAN' : selectedHero === 'kyle' ? 'KYLE' : selectedHero === 'stanNinja' ? 'STAN NINJA' : 'SNOOP DOGG'}
+                    {selectedHero === 'kenny' ? 'KENNY' : selectedHero === 'cartman' ? 'CARTMAN' : selectedHero === 'kyle' ? 'KYLE' : selectedHero === 'stanNinja' ? 'STAN NINJA' : selectedHero === 'snoopDogg' ? 'SNOOP DOGG' : 'SUPERHERO'}
                   </span>
                   <button
                     onClick={() => {

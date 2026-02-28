@@ -29,7 +29,7 @@ export interface Entity {
 export interface Player extends Entity {
   type: EntityType.PLAYER;
   playerId: string; // Network ID
-  heroType?: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg';
+  heroType?: 'kenny' | 'cartman' | 'kyle' | 'stanNinja' | 'snoopDogg' | 'superhero';
   elevation: number; // 0 = ground, 1 = roof
 
   // Movement / Dodge
