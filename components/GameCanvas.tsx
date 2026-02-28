@@ -266,7 +266,7 @@ const GameCanvas: React.FC = () => {
     keysRef.current.delete(e.key.toLowerCase());
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
       const canvasWidth = canvasRef.current?.width || 800;
@@ -3294,7 +3294,7 @@ const GameCanvas: React.FC = () => {
         ref={canvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
-        onMouseMove={handleMouseMove}
+        onPointerMove={handlePointerMove}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onContextMenu={handleContextMenu}
