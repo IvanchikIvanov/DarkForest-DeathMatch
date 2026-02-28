@@ -3263,16 +3263,14 @@ const GameCanvas: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="horror-menu-block">
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="text-slate-500 font-bold text-sm uppercase">Active Sessions</div>
-                    <div className="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
-                  </div>
-                  <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1">
-                    {openRooms.length === 0 ? (
-                      <div className="text-center py-6 text-slate-500 text-sm">No active arenas. Create one to begin.</div>
-                    ) : (
-                      openRooms.map((room) => (
+                {openRooms.length > 0 && (
+                  <div className="horror-menu-block">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="text-slate-500 font-bold text-sm uppercase">Active Sessions</div>
+                      <div className="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
+                    </div>
+                    <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1">
+                      {openRooms.map((room) => (
                         <div key={room.roomId} className="horror-arena-card">
                           <div>
                             <div className="text-red-200 font-bold">{room.creatorName}&apos;s Arena</div>
@@ -3294,10 +3292,10 @@ const GameCanvas: React.FC = () => {
                             {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'Join'}
                           </button>
                         </div>
-                      ))
-                    )}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex gap-4">
                   <button
