@@ -6,6 +6,7 @@ import { GameState, PlayerInput, Bomb, Obstacle, Unicorn, Satan, ShurikenPickup,
 import { createInitialState, createPlayer } from '../utils/gameLogic';
 import { Trophy, Users, Sword, User, Bomb as BombIcon, BookOpen, Medal } from 'lucide-react';
 import { PartyClient, LobbyClient, generateRoomId, type OpenRoom } from '../utils/partyClient';
+import MenuBackgroundCanvas, { type MenuBackgroundCanvasRef } from './MenuBackgroundCanvas';
 
 const GameCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,6 +68,7 @@ const GameCanvas: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<{ rank?: number; playerId?: string; ogpId?: string; points?: number; [k: string]: unknown }[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const playFunSdkRef = useRef<any>(null);
+  const menuBgRef = useRef<MenuBackgroundCanvasRef>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -3225,99 +3227,94 @@ const GameCanvas: React.FC = () => {
 
       {/* Menu / Hero Select */}
       {(uiState.status === 'MENU' || uiState.status === 'HERO_SELECT') && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white" style={{ backgroundColor: '#0f172a', fontFamily: "'Comic Sans MS', 'Chalkboard SE', sans-serif" }}>
-          {/* Title */}
-          <div className="text-center mb-8 relative z-10 transition-all duration-300 transform hover:scale-105">
-            <h1
-              className="text-5xl sm:text-6xl font-black tracking-tight text-orange-600 drop-shadow-md"
-              style={{ textShadow: '4px 4px 0 #1e293b, -2px -2px 0 #1e293b, 2px -2px 0 #1e293b, -2px 2px 0 #1e293b' }}
-            >
-              SOUTH PARK ROGUES
-            </h1>
-            <p className="text-xl font-bold text-slate-300 mt-2 filter drop-shadow">
-              WASD — Walk | Collect arsenal and survive!
-            </p>
-          </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-start pt-8 text-white select-none overflow-auto" style={{ backgroundColor: '#020617', fontFamily: "'Arial Black', sans-serif" }}>
+          <MenuBackgroundCanvas ref={menuBgRef} />
 
           {uiState.status === 'MENU' ? (
-            <div className="flex flex-col gap-6 w-[480px] max-w-[95vw] relative z-10">
-              {/* Create Arena Section */}
-              <div className="bg-slate-800 rounded-2xl p-6 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] transform transition-transform hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-black text-white px-2 py-1 bg-orange-600 rounded-lg transform -skew-x-6 border-2 border-slate-900">CREATE ARENA</h2>
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-700 rounded-full font-bold">
-                    <Users size={16} className="text-orange-400" />
-                    <span className="text-sm">2P</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } }))}
-                  disabled={isCreatingRoom}
-                  className="w-full mt-6 bg-orange-500 hover:bg-orange-400 text-slate-900 border-4 border-slate-900 rounded-xl px-6 py-4 font-black text-xl flex items-center justify-center gap-3 cursor-pointer shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
-                >
-                  <Sword size={24} /> SELECT HERO
-                </button>
+            <>
+              <div className="text-center mb-10 relative z-10 title-glow">
+                <div className="h-[120px]" />
+                <p className="text-red-950 font-black uppercase tracking-tighter text-xs mt-4 opacity-60">Darkness awaits those who wander</p>
               </div>
 
-              {/* Open Arenas List */}
-              <div className="bg-slate-800 rounded-2xl p-6 border-4 border-slate-900 shadow-[0_8px_0_0_#1e293b] transform transition-transform hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-black text-white px-2 py-1 bg-cyan-600 rounded-lg transform -skew-x-6 border-2 border-slate-900">OPEN ARENAS</h2>
-                  <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full">
-                    <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse border-2 border-slate-900" />
-                    <span className="text-sm font-bold">LIVE</span>
+              <div className="w-full max-w-[500px] flex flex-col gap-6 relative z-10 px-4">
+                <div className="horror-menu-block">
+                  <div className="flex justify-between items-center mb-6">
+                    <div className="text-red-600 italic font-black text-2xl tracking-tighter">ARENA MASTER</div>
+                    <div className="horror-badge font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-600 rounded-full" />
+                      2 SLOTS
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    <button
+                      onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } })); }}
+                      disabled={isCreatingRoom}
+                      className="horror-btn horror-btn-primary text-xl"
+                    >
+                      Create New Arena
+                    </button>
+                    <button
+                      onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'create' } })); }}
+                      className="horror-btn horror-btn-secondary"
+                    >
+                      Select Your Hero
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 max-h-64 overflow-y-auto pr-2">
-                  {openRooms.length === 0 ? (
-                    <div className="text-center py-8 bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-700">
-                      <Sword size={48} className="text-slate-600 mx-auto mb-2 opacity-50" />
-                      <p className="text-lg font-bold text-slate-400">NO ACTIVE ARENAS</p>
-                      <p className="text-sm text-slate-500 mt-1">Create one to begin!</p>
-                    </div>
-                  ) : (
-                    openRooms.map((room, index) => (
-                      <div key={room.roomId} className="flex items-center justify-between p-4 bg-slate-700 rounded-xl border-4 border-slate-900 shadow-md">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-black text-lg text-white">
-                              {room.creatorName}'s Arena
-                            </span>
-                            <div className="flex items-center gap-3 font-bold">
-                              <span className="text-slate-300 flex items-center gap-1">
-                                <Users size={14} /> {room.playerCount}/{room.maxPlayers ?? 2}
-                              </span>
-                              {room.gameMode === 'ctf' && (
-                                <span className="text-cyan-400 text-sm">CTF</span>
-                              )}
+
+                <div className="horror-menu-block">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="text-slate-500 font-bold text-sm uppercase">Active Sessions</div>
+                    <div className="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
+                  </div>
+                  <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1">
+                    {openRooms.length === 0 ? (
+                      <div className="text-center py-6 text-slate-500 text-sm">No active arenas. Create one to begin.</div>
+                    ) : (
+                      openRooms.map((room) => (
+                        <div key={room.roomId} className="horror-arena-card">
+                          <div>
+                            <div className="text-red-200 font-bold">{room.creatorName}&apos;s Arena</div>
+                            <div className="text-slate-600 text-xs font-bold uppercase">
+                              Players: {room.playerCount} / {room.maxPlayers ?? 2}
+                              {room.gameMode === 'ctf' && ' • CTF'}
                             </div>
                           </div>
-                        <button
-                          onClick={() => setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'join', room } }))}
-                          disabled={isJoiningRoom || room.playerCount >= (room.maxPlayers ?? 2)}
-                          className="bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-900 border-4 border-slate-900 rounded-xl px-6 py-3 font-black text-lg cursor-pointer shadow-[0_4px_0_0_#1e293b] active:shadow-none active:translate-y-[4px] transition-all"
-                        >
-                          {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'JOIN'}
-                        </button>
-                      </div>
-                    ))
-                  )}
+                          <button
+                            onClick={(e) => {
+                              menuBgRef.current?.spawnSplatter(e.clientX, e.clientY);
+                              if (!isJoiningRoom && room.playerCount < (room.maxPlayers ?? 2)) {
+                                setUiState(prev => ({ ...prev, status: 'HERO_SELECT', actionParams: { type: 'join', room } }));
+                              }
+                            }}
+                            disabled={isJoiningRoom || room.playerCount >= (room.maxPlayers ?? 2)}
+                            className="horror-btn horror-btn-primary py-2 px-6 w-auto text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isJoiningRoom ? 'WAIT' : room.playerCount >= (room.maxPlayers ?? 2) ? 'FULL' : 'Join'}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setShowRules(true); }}
+                    className="horror-btn horror-btn-secondary flex-1 text-sm"
+                  >
+                    Rules
+                  </button>
+                  <button
+                    onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setShowLeaderboard(true); fetchLeaderboard(); }}
+                    className="horror-btn horror-btn-gold flex-1 text-sm"
+                  >
+                    Top Survivors
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowRules(true)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-700/80 hover:bg-slate-600 border-2 border-slate-600 rounded-xl font-bold text-slate-300 transition-colors"
-                >
-                  <BookOpen size={18} /> RULES
-                </button>
-                <button
-                  onClick={() => { setShowLeaderboard(true); fetchLeaderboard(); }}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-amber-700/80 hover:bg-amber-600 border-2 border-amber-600 rounded-xl font-bold text-amber-200 transition-colors"
-                >
-                  <Medal size={18} /> LEADERBOARD
-                </button>
-              </div>
-            </div>
+            </>
           ) : (
             /* Hero Select Screen — hero left, menu right, same height */
             <div className="flex flex-row gap-10 w-[1024px] max-w-[95vw] relative z-10 items-stretch">
@@ -3401,20 +3398,21 @@ const GameCanvas: React.FC = () => {
 
                 <div className="flex gap-4 mt-auto">
                   <button
-                    onClick={() => setUiState(prev => ({ ...prev, status: 'MENU', actionParams: undefined }))}
-                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white border-4 border-slate-900 rounded-xl px-4 py-4 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+                    onClick={(e) => { menuBgRef.current?.spawnSplatter(e.clientX, e.clientY); setUiState(prev => ({ ...prev, status: 'MENU', actionParams: undefined })); }}
+                    className="flex-1 horror-btn horror-btn-secondary"
                   >
                     BACK
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      menuBgRef.current?.spawnSplatter(e.clientX, e.clientY);
                       if (uiState.actionParams?.type === 'create') {
                         createRoom();
                       } else if (uiState.actionParams?.type === 'join' && uiState.actionParams.room) {
                         joinOpenRoom(uiState.actionParams.room);
                       }
                     }}
-                    className="flex-2 bg-green-500 hover:bg-green-400 text-slate-900 border-4 border-slate-900 rounded-xl px-4 py-4 font-black text-xl shadow-[0_6px_0_0_#1e293b] active:shadow-none active:translate-y-[6px] transition-all"
+                    className="flex-2 horror-btn horror-btn-primary"
                   >
                     {uiState.actionParams?.type === 'create' ? 'CREATE ARENA' : uiState.actionParams?.type === 'join' ? 'JOIN ARENA' : 'ENTER ARENA'}
                   </button>

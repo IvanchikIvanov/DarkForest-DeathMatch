@@ -230,3 +230,87 @@ canvas {
   background: linear-gradient(180deg, rgba(0,255,255,0.12) 0%, rgba(0,0,0,0.5) 100%) !important;
   box-shadow: 0 0 20px rgba(0,255,255,0.15), inset 0 0 15px rgba(0,255,255,0.05) !important;
 }
+
+/* ============ HORROR MENU ============ */
+.horror-menu-block {
+  background: linear-gradient(145deg, #0f172a 0%, #020617 100%);
+  border: 2px solid #310a0a;
+  border-radius: 1.2rem;
+  padding: 1.5rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(153, 27, 27, 0.1);
+}
+.horror-btn {
+  position: relative;
+  width: 100%;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.1s ease;
+  cursor: pointer;
+  border: 1px solid #450a0a;
+  overflow: hidden;
+}
+.horror-btn-primary {
+  background: linear-gradient(180deg, #991b1b 0%, #450a0a 100%);
+  box-shadow: 0 6px 0 #2d0606, 0 10px 20px rgba(0,0,0,0.4);
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.horror-btn-primary:hover {
+  background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
+  border-color: #ef4444;
+  box-shadow: 0 6px 0 #2d0606, 0 0 20px rgba(239, 68, 68, 0.2);
+}
+.horror-btn-primary:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #2d0606;
+}
+.horror-btn-secondary {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 6px 0 #020617, 0 10px 20px rgba(0,0,0,0.4);
+  color: #94a3b8;
+}
+.horror-btn-secondary:hover {
+  color: #f8fafc;
+  border-color: #450a0a;
+}
+.horror-btn-secondary:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #020617;
+}
+.horror-btn-gold {
+  background: linear-gradient(180deg, #854d0e 0%, #422006 100%);
+  box-shadow: 0 6px 0 #1c0f04, 0 10px 20px rgba(0,0,0,0.4);
+  color: #fef08a;
+  border-color: #713f12;
+}
+.horror-btn-gold:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #1c0f04;
+}
+.horror-badge {
+  background: #000;
+  border: 1px solid #450a0a;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #f87171;
+}
+.horror-arena-card {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid #1e293b;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.title-glow {
+  animation: horror-glow 4s infinite alternate;
+}
+@keyframes horror-glow {
+  from { filter: drop-shadow(0 0 10px rgba(153, 27, 27, 0.4)); }
+  to { filter: drop-shadow(0 0 30px rgba(153, 27, 27, 0.8)); }
+}
