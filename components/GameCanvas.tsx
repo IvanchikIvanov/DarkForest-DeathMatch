@@ -260,16 +260,20 @@ const GameCanvas: React.FC = () => {
     }
   }, []);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     if (e.button === 0) {
       mouseDownRef.current = true;
     } else if (e.button === 2) {
       mouseRightDownRef.current = true;
     }
+    // Capture pointer so we receive pointerup even when cursor leaves canvas (e.g. during WASD + click)
+    if (canvasRef.current && 'setPointerCapture' in canvasRef.current) {
+      (canvasRef.current as HTMLElement).setPointerCapture(e.pointerId);
+    }
   }, []);
 
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (e.button === 0) {
       mouseDownRef.current = false;
     } else if (e.button === 2) {
@@ -3020,6 +3024,12 @@ const GameCanvas: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
+    const handleWindowPointerUp = (e: PointerEvent) => {
+      if (e.button === 0) mouseDownRef.current = false;
+      if (e.button === 2) mouseRightDownRef.current = false;
+    };
+    window.addEventListener('pointerup', handleWindowPointerUp);
+
     const handleResize = () => {
       const newSize = { width: window.innerWidth, height: window.innerHeight };
       setCanvasSize(newSize);
@@ -3035,6 +3045,7 @@ const GameCanvas: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
       window.removeEventListener('resize', handleResize);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
@@ -3048,8 +3059,8 @@ const GameCanvas: React.FC = () => {
         width={canvasSize.width}
         height={canvasSize.height}
         onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
         onContextMenu={handleContextMenu}
         className="w-full h-full border-4 border-zinc-700 bg-black shadow-2xl"
         style={{ display: 'block' }}
