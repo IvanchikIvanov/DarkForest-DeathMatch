@@ -76,11 +76,7 @@ export class PartyClient {
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'STATE') {
-                    // DEBUG: Log raw payload to verify server data
                     const payload = data.payload;
-                    if (payload.status === 'PLAYING') {
-                        console.log('[PartyClient RAW] healthPickups:', payload.healthPickups?.length, 'gunPickups:', payload.gunPickups?.length, 'swordPickups:', payload.swordPickups?.length);
-                    }
 
                     // First message contains yourId
                     if (data.yourId && !this.playerId) {

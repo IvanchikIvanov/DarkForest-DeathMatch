@@ -71,17 +71,22 @@ const GameCanvas: React.FC = () => {
 
   // Assets no longer loaded - all rendering is vector-based
 
+  const lastUiStateRef = useRef<{ status: string; playerCount: number; winner: string; winnerTeamId?: number | null } | null>(null);
+
   // --- Initialize PartyKit Client ---
   useEffect(() => {
     const client = new PartyClient({
       onStateUpdate: (state, hostId) => {
-        stateRef.current = state;
-        setUiState({
-          status: state.status,
-          playerCount: Object.keys(state.players).length,
-          winner: state.winnerId || '',
-          winnerTeamId: (state as any).winnerTeamId
-        });
+        stateRef.current = { ...state, tileMap: state.tileMap ?? stateRef.current?.tileMap };
+        const pc = Object.keys(state.players).length;
+        const w = state.winnerId || '';
+        const wt = (state as any).winnerTeamId;
+        const next = { status: state.status, playerCount: pc, winner: w, winnerTeamId: wt };
+        const prev = lastUiStateRef.current;
+        if (!prev || prev.status !== next.status || prev.playerCount !== next.playerCount || prev.winner !== next.winner || prev.winnerTeamId !== next.winnerTeamId) {
+          lastUiStateRef.current = next;
+          setUiState(u => ({ ...u, ...next }));
+        }
         if (hostId && playerIdRef.current) {
           setIsHost(hostId === playerIdRef.current);
         }

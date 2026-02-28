@@ -1410,8 +1410,8 @@ export default class GameRoom implements Party.Server {
     this.gameLoop = setInterval(() => {
       this.updateGame();
       this.broadcastFrame++;
-      // Broadcast at 30fps to reduce network load and lag (physics still 60fps)
-      if (this.broadcastFrame % 2 === 0) {
+      // Broadcast at 15fps to reduce network load (physics 60fps)
+      if (this.broadcastFrame % 4 === 0) {
         this.broadcast();
       }
     }, 1000 / 60);
@@ -2794,9 +2794,12 @@ export default class GameRoom implements Party.Server {
   }
 
   broadcast() {
+    const { tileMap, particles, ...rest } = this.state;
+    const cappedParticles = particles.slice(-80);
+    const payload = { ...rest, particles: cappedParticles, maxPlayers: this.maxPlayers };
     const message = JSON.stringify({
       type: 'STATE',
-      payload: { ...this.state, maxPlayers: this.maxPlayers },
+      payload,
       hostId: this.hostId
     });
     for (const conn of this.room.getConnections()) {
